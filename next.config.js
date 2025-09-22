@@ -5,6 +5,12 @@
 import "./src/env.js";
 
 /** @type {import("next").NextConfig} */
-const config = {};
+const config = {
+    typedRoutes: true,
+    experimental: {
+        viewTransition: true,
+        authInterrupts: true
+    }
+};
 
 export default config;
