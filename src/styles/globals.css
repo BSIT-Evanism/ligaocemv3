@@ -123,3 +123,31 @@
     @apply bg-background text-foreground;
   }
 }
+
+/* Fix Leaflet map z-index issues with modals */
+.leaflet-container {
+  z-index: 1 !important;
+}
+
+.leaflet-control-container {
+  z-index: 2 !important;
+}
+
+.leaflet-map-container {
+  z-index: 1 !important;
+  position: relative;
+}
+
+/* Ensure modals and overlays have higher z-index than maps */
+[data-radix-portal] {
+  z-index: 50 !important;
+}
+
+/* Specific fix for AlertDialog */
+[data-slot="alert-dialog-overlay"] {
+  z-index: 50 !important;
+}
+
+[data-slot="alert-dialog-content"] {
+  z-index: 51 !important;
+}

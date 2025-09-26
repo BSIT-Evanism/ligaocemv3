@@ -98,11 +98,11 @@ const timingMiddleware = t.middleware(async ({ next, path }) => {
 });
 
 const authMiddleware = t.middleware(async ({ next, ctx }) => {
-  const { user } = await auth.api.getSession({
+  const session = await auth.api.getSession({
     headers: ctx.headers,
   });
 
-  if (!user) {
+  if (!session?.user) {
     throw new TRPCError({ code: "UNAUTHORIZED" });
   }
 
@@ -110,15 +110,16 @@ const authMiddleware = t.middleware(async ({ next, ctx }) => {
 });
 
 const adminMiddleware = t.middleware(async ({ next, ctx }) => {
-  const { user } = await auth.api.getSession({
+
+  const session = await auth.api.getSession({
     headers: ctx.headers,
   });
 
-  if (!user) {
+  if (!session?.user) {
     throw new TRPCError({ code: "UNAUTHORIZED" });
   }
 
-  if (user.role !== "admin") {
+  if (session.user.role !== "admin") {
     throw new TRPCError({ code: "UNAUTHORIZED" });
   }
 
@@ -143,4 +144,4 @@ export const publicProcedure = t.procedure.use(timingMiddleware);
  */
 export const authenticatedProcedure = t.procedure.use(authMiddleware);
 
-export const adminProcedure = t.procedure.use(authMiddleware).use(adminMiddleware);
+export const adminProcedure = t.procedure.use(authMiddleware).use(adminMiddleware)

@@ -233,3 +233,9 @@ export const requestGraveRelationRelations = relations(requestGraveRelation, ({ 
     references: [graveDetails.id],
   }),
 }));
+
+
+export const userRelations = relations(user, ({ many }) => ({
+  requests: many(request),
+  graveRelatedUsers: many(graveRelatedUsers),
+}));

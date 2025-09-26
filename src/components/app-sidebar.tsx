@@ -16,6 +16,9 @@ import {
   SidebarRail,
 } from "@/components/ui/sidebar"
 import { usePathname } from "next/navigation"
+import Link from "next/link"
+import { LinkLoader } from "./link-loader"
+import { useSession } from "@/lib/auth-client"
 
 // This is sample data.
 const data = {
@@ -35,20 +38,32 @@ const data = {
         },
       ],
     },
+    {
+      title: "Grave Module",
+      url: "/admin/graves",
+      items: [
+        {
+          title: "Manage Graves",
+          url: "/admin/graves",
+        },
+        {
+          title: "Manage Clusters",
+          url: "/admin/graves/clusters",
+        },
+      ],
+    }
   ],
 }
 
 export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
 
   const path = usePathname()
+  const { data: userData } = useSession()
 
   return (
     <Sidebar {...props}>
       <SidebarHeader>
-        <VersionSwitcher
-          versions={data.versions}
-          defaultVersion={data.versions[0] ?? ""}
-        />
+        {userData?.user.name}
         <SearchForm />
       </SidebarHeader>
       <SidebarContent>
@@ -61,7 +76,11 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
                 {item.items.map((item) => (
                   <SidebarMenuItem key={item.title}>
                     <SidebarMenuButton asChild isActive={item.url === path}>
-                      <a href={item.url}>{item.title}</a>
+                      {/* @ts-expect-error - TODO: Fix this */}
+                      <Link href={item.url} className="flex gap-2">
+                        {item.title}
+                        <LinkLoader />
+                      </Link>
                     </SidebarMenuButton>
                   </SidebarMenuItem>
                 ))}
