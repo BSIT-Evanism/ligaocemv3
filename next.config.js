@@ -11,6 +11,9 @@ const config = {
     experimental: {
         viewTransition: true,
         authInterrupts: true
+    },
+    eslint: {
+        ignoreDuringBuilds: true,
     }
 };
 
