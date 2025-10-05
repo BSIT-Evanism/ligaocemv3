@@ -23,9 +23,9 @@ export default function RootLayout({
 }: Readonly<{ children: React.ReactNode }>) {
   return (
     <html lang="en" className={`${geist.variable}`}>
-      <body>
+      <body >
         <Toaster />
-        <TRPCReactProvider>{children}</TRPCReactProvider>
+        <TRPCReactProvider><main data-vaul-drawer-wrapper="true">{children}</main></TRPCReactProvider>
       </body>
     </html>
   );

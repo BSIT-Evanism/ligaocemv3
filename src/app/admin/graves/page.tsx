@@ -19,7 +19,6 @@ import { Trash2, Search, ChevronLeft, ChevronRight, Check, ChevronsUpDown, Eye, 
 import { toast } from "sonner";
 import { unstable_ViewTransition as ViewTransition } from "react";
 import { ButtonGroup } from "@/components/ui/button-group";
-import Image from "next/image";
 
 type Grave = {
     id: string;
@@ -40,8 +39,17 @@ export default function GravesPage() {
     const [drawerOpen, setDrawerOpen] = useState(false)
     const [selectedCluster, setSelectedCluster] = useState<{ id: string, name: string, clusterNumber: number } | null>(null)
     const [instructionDrawerOpen, setInstructionDrawerOpen] = useState(false)
-    const [instructions, setInstructions] = useState<Array<{ id: string, step: number, title: string, description: string, image?: string }>>([])
+    const [instructions, setInstructions] = useState<Array<{
+        id: string,
+        step: number,
+        title: string,
+        description: string,
+        imageUrl?: string,
+        imageCustomId?: string
+    }>>([])
     const [isLoadingInstructions, setIsLoadingInstructions] = useState(false)
+    const [dirtySteps, setDirtySteps] = useState<Record<string, boolean>>({})
+    const [savingStepId, setSavingStepId] = useState<string | null>(null)
 
     // Debounce search term
     const debouncedSearchTerm = useDebounce(searchTerm, 300)
@@ -125,13 +133,73 @@ export default function GravesPage() {
     const utils = api.useUtils();
 
     // Instructions tRPC mutations
-    const saveInstructions = api.instructions.upsert.useMutation({
-        onSuccess: () => {
-            toast.success("Instructions saved successfully!");
-            setInstructionDrawerOpen(false);
+    const addStep = api.instructions.addStep.useMutation({
+        onSuccess: (newStep) => {
+            if (newStep) {
+                const [title, ...descriptionParts] = newStep.instruction.split('\n\n');
+                const formattedStep = {
+                    id: newStep.id,
+                    step: newStep.step,
+                    title: title ?? '',
+                    description: descriptionParts.join('\n\n') ?? '',
+                    imageUrl: newStep.imageUrl ?? undefined,
+                    imageCustomId: newStep.imageCustomId ?? undefined
+                };
+                setInstructions(prev => [...prev, formattedStep]);
+                toast.success("Step added successfully!");
+            }
         },
         onError: (error) => {
-            toast.error(`Failed to save instructions: ${error?.message ?? "Unknown error"}`);
+            toast.error(`Failed to add step: ${error?.message ?? "Unknown error"}`);
+        },
+    });
+
+    const updateStep = api.instructions.updateStep.useMutation({
+        onSuccess: () => {
+            toast.success("Step updated successfully!");
+        },
+        onError: (error) => {
+            toast.error(`Failed to update step: ${error?.message ?? "Unknown error"}`);
+        },
+    });
+
+    const deleteStep = api.instructions.deleteStep.useMutation({
+        onSuccess: (_, variables) => {
+            setInstructions(prev => prev.filter(step => step.id !== variables.stepId));
+            toast.success("Step deleted successfully!");
+        },
+        onError: (error) => {
+            toast.error(`Failed to delete step: ${error?.message ?? "Unknown error"}`);
+        },
+    });
+
+    const uploadStepImage = api.instructions.uploadStepImage.useMutation({
+        onSuccess: (updatedStep, variables) => {
+            if (updatedStep) {
+                setInstructions(prev => prev.map(step =>
+                    step.id === variables.stepId
+                        ? { ...step, imageUrl: updatedStep.imageUrl ?? undefined, imageCustomId: updatedStep.imageCustomId ?? undefined }
+                        : step
+                ));
+                toast.success("Image uploaded successfully!");
+            }
+        },
+        onError: (error) => {
+            toast.error(`Failed to upload image: ${error?.message ?? "Unknown error"}`);
+        },
+    });
+
+    const removeStepImage = api.instructions.removeStepImage.useMutation({
+        onSuccess: (_, variables) => {
+            setInstructions(prev => prev.map(step =>
+                step.id === variables.stepId
+                    ? { ...step, imageUrl: undefined, imageCustomId: undefined }
+                    : step
+            ));
+            toast.success("Image removed successfully!");
+        },
+        onError: (error) => {
+            toast.error(`Failed to remove image: ${error?.message ?? "Unknown error"}`);
         },
     });
 
@@ -144,6 +212,8 @@ export default function GravesPage() {
             toast.error(`Failed to delete instructions: ${error?.message ?? "Unknown error"}`);
         },
     });
+
+    const testSchema = api.instructions.testSchema.useQuery();
 
     const deleteGrave = api.graves.delete.useMutation({
         onSuccess: async () => {
@@ -184,9 +254,10 @@ export default function GravesPage() {
                     return {
                         id: step.id,
                         step: step.step,
-                        title: title || '',
-                        description: descriptionParts.join('\n\n') || '',
-                        image: step.imageUrl || ''
+                        title: title ?? '',
+                        description: descriptionParts.join('\n\n') ?? '',
+                        imageUrl: step.imageUrl ?? undefined,
+                        imageCustomId: step.imageCustomId ?? undefined
                     };
                 });
                 setInstructions(formattedSteps);
@@ -202,36 +273,59 @@ export default function GravesPage() {
     };
 
     const addInstructionStep = () => {
-        const newStep = {
-            id: Date.now().toString(),
-            step: instructions.length + 1,
+        if (!selectedCluster) return;
+
+        addStep.mutate({
+            clusterId: selectedCluster.id,
             title: '',
-            description: '',
-            image: ''
-        };
-        setInstructions([...instructions, newStep]);
+            description: ''
+        });
     };
 
     const updateInstructionStep = (id: string, field: string, value: string) => {
         setInstructions(instructions.map(instruction =>
             instruction.id === id ? { ...instruction, [field]: value } : instruction
         ));
+        // mark as dirty; save will be triggered by explicit button
+        setDirtySteps(prev => ({ ...prev, [id]: true }));
+    };
+
+    const saveInstructionStep = (id: string) => {
+        const step = instructions.find(s => s.id === id);
+        if (!step) return;
+        setSavingStepId(id);
+        updateStep.mutate({
+            stepId: id,
+            title: step.title,
+            description: step.description
+        }, {
+            onSuccess: () => {
+                setDirtySteps(prev => ({ ...prev, [id]: false }));
+                setSavingStepId(null);
+            },
+            onError: () => {
+                setSavingStepId(null);
+            }
+        });
     };
 
     const deleteInstructionStep = (id: string) => {
-        const updatedInstructions = instructions.filter(instruction => instruction.id !== id);
-        // Reorder steps
-        const reorderedInstructions = updatedInstructions.map((instruction, index) => ({
-            ...instruction,
-            step: index + 1
-        }));
-        setInstructions(reorderedInstructions);
+        deleteStep.mutate({ stepId: id });
     };
 
     const handleImageUpload = (id: string, file: File) => {
+        console.log('Uploading image for step:', id, 'File:', file.name, 'Size:', file.size);
         const reader = new FileReader();
         reader.onload = (e) => {
-            updateInstructionStep(id, 'image', e.target?.result as string);
+            const base64Data = e.target?.result as string;
+            console.log('Base64 data length:', base64Data?.length);
+            console.log('Base64 starts with:', base64Data?.substring(0, 50));
+
+            // Upload image directly to server
+            uploadStepImage.mutate({
+                stepId: id,
+                imageData: base64Data
+            });
         };
         reader.readAsDataURL(file);
     };
@@ -628,6 +722,16 @@ export default function GravesPage() {
                                             <div>
                                                 <h3 className="text-lg font-semibold">{selectedCluster.name}</h3>
                                                 <p className="text-sm text-gray-500">Cluster #{selectedCluster.clusterNumber}</p>
+                                                {testSchema.data && (
+                                                    <div className="text-xs mt-1">
+                                                        <span className={`px-2 py-1 rounded ${testSchema.data.success ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
+                                                            Schema: {testSchema.data.success ? 'OK' : 'Error'}
+                                                        </span>
+                                                        {!testSchema.data.success && (
+                                                            <span className="ml-2 text-red-600">{testSchema.data.error}</span>
+                                                        )}
+                                                    </div>
+                                                )}
                                             </div>
                                             <Button onClick={addInstructionStep} className="flex items-center gap-2">
                                                 <Plus className="h-4 w-4" />
@@ -681,22 +785,32 @@ export default function GravesPage() {
                                                                 />
                                                             </div>
 
+                                                            <div className="flex justify-end">
+                                                                <Button
+                                                                    variant="outline"
+                                                                    onClick={() => saveInstructionStep(instruction.id)}
+                                                                    disabled={!dirtySteps[instruction.id] || savingStepId === instruction.id}
+                                                                >
+                                                                    {savingStepId === instruction.id ? 'Saving...' : (dirtySteps[instruction.id] ? 'Save' : 'Saved')}
+                                                                </Button>
+                                                            </div>
+
                                                             <div>
                                                                 <label className="text-sm font-medium text-gray-700">Image</label>
                                                                 <div className="mt-1">
-                                                                    {instruction.image ? (
+                                                                    {instruction.imageUrl ? (
                                                                         <div className="space-y-2">
-                                                                            <Image
-                                                                                src={instruction.image}
+                                                                            <img
+                                                                                src={instruction.imageUrl}
                                                                                 alt={`Step ${instruction.step}`}
-                                                                                width={1000}
-                                                                                height={1000}
                                                                                 className="w-full max-w-md h-48 object-cover rounded-md border"
                                                                             />
                                                                             <Button
                                                                                 variant="outline"
                                                                                 size="sm"
-                                                                                onClick={() => updateInstructionStep(instruction.id, 'image', '')}
+                                                                                onClick={() => {
+                                                                                    removeStepImage.mutate({ stepId: instruction.id });
+                                                                                }}
                                                                                 className="text-red-500 hover:text-red-700"
                                                                             >
                                                                                 <X className="h-4 w-4 mr-1" />
@@ -736,36 +850,21 @@ export default function GravesPage() {
                             </div>
                         )}
                     </div>
-                    {instructions.length > 0 && (
-                        <div className="flex-shrink-0 pt-4 border-t bg-white">
-                            <div className="flex justify-between items-center p-4">
-                                <div className="text-sm text-gray-500">
-                                    {instructions.length} step{instructions.length !== 1 ? 's' : ''} added
-                                </div>
-                                <div className="flex gap-2">
-                                    <Button
-                                        variant="outline"
-                                        onClick={() => setInstructionDrawerOpen(false)}
-                                    >
-                                        Close
-                                    </Button>
-                                    <Button
-                                        onClick={() => {
-                                            if (selectedCluster) {
-                                                saveInstructions.mutate({
-                                                    clusterId: selectedCluster.id,
-                                                    steps: instructions
-                                                });
-                                            }
-                                        }}
-                                        disabled={saveInstructions.isPending}
-                                    >
-                                        {saveInstructions.isPending ? "Saving..." : "Save Instructions"}
-                                    </Button>
-                                </div>
+                    <div className="flex-shrink-0 pt-4 border-t bg-white">
+                        <div className="flex justify-between items-center p-4">
+                            <div className="text-sm text-gray-500">
+                                {instructions.length} step{instructions.length !== 1 ? 's' : ''} added
+                            </div>
+                            <div className="flex gap-2">
+                                <Button
+                                    variant="outline"
+                                    onClick={() => setInstructionDrawerOpen(false)}
+                                >
+                                    Close
+                                </Button>
                             </div>
                         </div>
-                    )}
+                    </div>
                 </DrawerContent>
             </Drawer>
         </div>

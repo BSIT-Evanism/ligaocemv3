@@ -135,6 +135,7 @@ export const clusterInstructionSteps = createTable("cluster_instruction_steps", 
   step: integer("step").notNull(),
   instruction: text("instruction").notNull(),
   imageUrl: text("image_url"),
+  imageCustomId: text("image_custom_id"),
   clusterInstructionsId: text("cluster_instructions_id")
     .notNull()
     .references(() => clusterInstructions.id, { onDelete: "cascade" }),
