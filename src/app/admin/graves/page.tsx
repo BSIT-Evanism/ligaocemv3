@@ -6,15 +6,28 @@ const Map = dynamic(() => import("@/components/Map"), { ssr: false });
 import { GraveModal } from "@/components/GraveModal";
 import { useEffect, useState, useMemo } from "react";
 import { api } from "@/trpc/react";
+import { useDebounce } from "@/hooks/use-debounce";
+import { HighlightText } from "@/lib/search-highlight";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { Trash2, Search, ChevronLeft, ChevronRight, Check, ChevronsUpDown } from "lucide-react";
+import { Drawer, DrawerContent, DrawerHeader, DrawerTitle, DrawerDescription } from "@/components/ui/drawer";
+import { Trash2, Search, ChevronLeft, ChevronRight, Check, ChevronsUpDown, Eye, BookOpen, Plus, X, Upload } from "lucide-react";
 import { toast } from "sonner";
 import { unstable_ViewTransition as ViewTransition } from "react";
+import { ButtonGroup } from "@/components/ui/button-group";
+import Image from "next/image";
+
+type Grave = {
+    id: string;
+    graveClusterId: string;
+    graveJson: unknown;
+    createdAt: Date;
+    updatedAt: Date;
+};
 
 export default function GravesPage() {
     const [polygon, setPolygon] = useState<[number, number][]>([])
@@ -23,12 +36,39 @@ export default function GravesPage() {
     const [itemsPerPage] = useState(10)
     const [selectedClusterForAdd, setSelectedClusterForAdd] = useState<string>("")
     const [comboboxOpen, setComboboxOpen] = useState(false)
+    const [selectedGrave, setSelectedGrave] = useState<Grave | null>(null)
+    const [drawerOpen, setDrawerOpen] = useState(false)
+    const [selectedCluster, setSelectedCluster] = useState<{ id: string, name: string, clusterNumber: number } | null>(null)
+    const [instructionDrawerOpen, setInstructionDrawerOpen] = useState(false)
+    const [instructions, setInstructions] = useState<Array<{ id: string, step: number, title: string, description: string, image?: string }>>([])
+    const [isLoadingInstructions, setIsLoadingInstructions] = useState(false)
+
+    // Debounce search term
+    const debouncedSearchTerm = useDebounce(searchTerm, 300)
 
     // Fetch clusters using tRPC
     const { data: clusters = [], error: clustersError } = api.clusters.listAll.useQuery()
 
-    // Fetch all graves
-    const { data: allGraves = [], isLoading: gravesLoading, error: gravesError } = api.graves.listAll.useQuery()
+    // Fetch graves with server-side search
+    const { data: searchResults, isLoading: gravesLoading, error: gravesError } = api.search.graves.useQuery(
+        {
+            query: debouncedSearchTerm,
+            limit: 1000, // Large limit to get all results for client-side pagination
+            offset: 0,
+        },
+        {
+            enabled: debouncedSearchTerm.length > 0,
+            retry: false,
+        }
+    )
+
+    // Fallback to all graves when no search term
+    const { data: allGraves = [], isLoading: allGravesLoading, error: allGravesError } = api.graves.listAll.useQuery(
+        undefined,
+        {
+            enabled: debouncedSearchTerm.length === 0,
+        }
+    )
 
     // Handle errors
     if (clustersError) {
@@ -37,48 +77,27 @@ export default function GravesPage() {
     if (gravesError) {
         console.error("Error fetching graves:", gravesError);
     }
+    if (allGravesError) {
+        console.error("Error fetching all graves:", allGravesError);
+    }
 
-    // Group graves by cluster
-    const gravesByCluster = useMemo(() => {
-        if (!Array.isArray(allGraves)) return {};
+    // Determine which graves to use
+    const graves = useMemo(() => {
+        return debouncedSearchTerm.length > 0 ? (searchResults?.results ?? []) : allGraves
+    }, [debouncedSearchTerm, searchResults, allGraves])
+    const isLoading = debouncedSearchTerm.length > 0 ? gravesLoading : allGravesLoading
 
-        const grouped: Record<string, typeof allGraves> = {};
+    // Group graves by cluster (removed unused variable)
 
-        allGraves.forEach((grave) => {
-            const clusterId = grave.graveClusterId;
-            grouped[clusterId] ??= [];
-            grouped[clusterId].push(grave);
-        });
-
-        return grouped;
-    }, [allGraves]);
-
-    // Search and pagination logic
-    const filteredGraves = useMemo(() => {
-        if (!Array.isArray(allGraves)) return [];
-
-        return allGraves.filter((grave) => {
-            const graveData = grave.graveJson as Record<string, unknown>;
-            const searchLower = searchTerm.toLowerCase();
-
-            return (
-                (graveData.deceasedName as string)?.toLowerCase().includes(searchLower) ||
-                (graveData.plotNumber as string)?.toLowerCase().includes(searchLower) ||
-                (graveData.graveType as string)?.toLowerCase().includes(searchLower) ||
-                (graveData.notes as string)?.toLowerCase().includes(searchLower)
-            );
-        });
-    }, [allGraves, searchTerm]);
-
-    const totalPages = Math.ceil(filteredGraves.length / itemsPerPage);
+    const totalPages = Math.ceil(graves.length / itemsPerPage);
     const startIndex = (currentPage - 1) * itemsPerPage;
     const endIndex = startIndex + itemsPerPage;
-    const paginatedGraves = filteredGraves.slice(startIndex, endIndex);
+    const paginatedGraves = graves.slice(startIndex, endIndex);
 
     // Reset pagination when search changes
     useEffect(() => {
         setCurrentPage(1);
-    }, [searchTerm]);
+    }, [debouncedSearchTerm]);
 
     useEffect(() => {
         setPolygon([
@@ -105,6 +124,27 @@ export default function GravesPage() {
 
     const utils = api.useUtils();
 
+    // Instructions tRPC mutations
+    const saveInstructions = api.instructions.upsert.useMutation({
+        onSuccess: () => {
+            toast.success("Instructions saved successfully!");
+            setInstructionDrawerOpen(false);
+        },
+        onError: (error) => {
+            toast.error(`Failed to save instructions: ${error?.message ?? "Unknown error"}`);
+        },
+    });
+
+    const deleteInstructions = api.instructions.delete.useMutation({
+        onSuccess: () => {
+            toast.success("Instructions deleted successfully!");
+            setInstructions([]);
+        },
+        onError: (error) => {
+            toast.error(`Failed to delete instructions: ${error?.message ?? "Unknown error"}`);
+        },
+    });
+
     const deleteGrave = api.graves.delete.useMutation({
         onSuccess: async () => {
             await utils.graves.listAll.invalidate();
@@ -126,6 +166,76 @@ export default function GravesPage() {
         await utils.graves.listAll.invalidate();
     };
 
+    const handleOpenDrawer = (grave: Grave) => {
+        setSelectedGrave(grave);
+        setDrawerOpen(true);
+    };
+
+    const handleOpenInstructionDrawer = async (cluster: { id: string, name: string, clusterNumber: number }) => {
+        setSelectedCluster(cluster);
+        setInstructionDrawerOpen(true);
+        setIsLoadingInstructions(true);
+
+        try {
+            const existingInstructions = await utils.instructions.getByCluster.fetch({ clusterId: cluster.id });
+            if (existingInstructions?.steps) {
+                const formattedSteps = existingInstructions.steps.map(step => {
+                    const [title, ...descriptionParts] = step.instruction.split('\n\n');
+                    return {
+                        id: step.id,
+                        step: step.step,
+                        title: title || '',
+                        description: descriptionParts.join('\n\n') || '',
+                        image: step.imageUrl || ''
+                    };
+                });
+                setInstructions(formattedSteps);
+            } else {
+                setInstructions([]);
+            }
+        } catch (error) {
+            console.error('Error loading instructions:', error);
+            setInstructions([]);
+        } finally {
+            setIsLoadingInstructions(false);
+        }
+    };
+
+    const addInstructionStep = () => {
+        const newStep = {
+            id: Date.now().toString(),
+            step: instructions.length + 1,
+            title: '',
+            description: '',
+            image: ''
+        };
+        setInstructions([...instructions, newStep]);
+    };
+
+    const updateInstructionStep = (id: string, field: string, value: string) => {
+        setInstructions(instructions.map(instruction =>
+            instruction.id === id ? { ...instruction, [field]: value } : instruction
+        ));
+    };
+
+    const deleteInstructionStep = (id: string) => {
+        const updatedInstructions = instructions.filter(instruction => instruction.id !== id);
+        // Reorder steps
+        const reorderedInstructions = updatedInstructions.map((instruction, index) => ({
+            ...instruction,
+            step: index + 1
+        }));
+        setInstructions(reorderedInstructions);
+    };
+
+    const handleImageUpload = (id: string, file: File) => {
+        const reader = new FileReader();
+        reader.onload = (e) => {
+            updateInstructionStep(id, 'image', e.target?.result as string);
+        };
+        reader.readAsDataURL(file);
+    };
+
 
     const getGraveTypeColor = (graveType: string) => {
         const colors = {
@@ -135,16 +245,16 @@ export default function GravesPage() {
             columbarium: "bg-orange-100 text-orange-800",
             memorial: "bg-gray-100 text-gray-800"
         };
-        return colors[graveType as keyof typeof colors] || "bg-gray-100 text-gray-800";
+        return colors[graveType as keyof typeof colors] ?? "bg-gray-100 text-gray-800";
     };
 
     return (
-        <div className="flex gap-4 w-full flex-1 min-h-0">
+        <div className="flex h-screen w-full gap-4 container">
             {/* Map - 50% left */}
-            <div className="flex-1 min-h-0 relative z-0">
-                <ViewTransition name="main-map">
+            <ViewTransition name="main-map">
+                <div className="sticky top-20 h-[80vh] w-1/2">
                     <Map
-                        className="h-full w-full relative z-0"
+                        className="h-full w-full"
                         center={[13.235529662734809, 123.53030072913442]}
                         zoom={16}
                         maxZoom={19}
@@ -155,191 +265,509 @@ export default function GravesPage() {
                         enableAddClusters={false}
                         enableAddMarkers={false}
                     />
+                </div>
+            </ViewTransition>
+
+            {/* Graves List - 50% right */}
+            <div className="w-1/2 p-4 space-y-4">
+                <ViewTransition name="main-card-right">
+                    <Card>
+                        <CardHeader>
+                            <div className="flex items-center justify-between">
+                                <div>
+                                    <CardTitle>All Graves</CardTitle>
+                                    <p className="text-sm text-gray-600">
+                                        {Array.isArray(graves) ? graves.length : 0} graves found
+                                    </p>
+                                </div>
+                                <div className="">
+                                    <ButtonGroup>
+                                        <Popover open={comboboxOpen} onOpenChange={setComboboxOpen}>
+                                            <PopoverTrigger asChild>
+                                                <Button
+                                                    variant="outline"
+                                                    role="combobox"
+                                                    aria-expanded={comboboxOpen}
+                                                // className="w-[200px] justify-between"
+                                                >
+                                                    {selectedClusterForAdd
+                                                        ? clusters.find((cluster) => cluster.id === selectedClusterForAdd)?.name
+                                                        : "Select cluster..."}
+                                                    <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                                                </Button>
+                                            </PopoverTrigger>
+                                            <PopoverContent className="w-[200px] p-0">
+                                                <Command>
+                                                    <CommandInput placeholder="Search clusters..." />
+                                                    <CommandList>
+                                                        <CommandEmpty>No cluster found.</CommandEmpty>
+                                                        <CommandGroup>
+                                                            {clusters.map((cluster) => (
+                                                                <CommandItem
+                                                                    key={cluster.id}
+                                                                    value={cluster.name}
+                                                                    onSelect={(currentValue) => {
+                                                                        const selectedCluster = clusters.find(c => c.name === currentValue)
+                                                                        setSelectedClusterForAdd(selectedCluster?.id === selectedClusterForAdd ? "" : selectedCluster?.id ?? "")
+                                                                        setComboboxOpen(false)
+                                                                    }}
+                                                                >
+                                                                    <Check
+                                                                        className={`mr-2 h-4 w-4 ${selectedClusterForAdd === cluster.id ? "opacity-100" : "opacity-0"
+                                                                            }`}
+                                                                    />
+                                                                    {cluster.name}
+                                                                </CommandItem>
+                                                            ))}
+                                                        </CommandGroup>
+                                                    </CommandList>
+                                                </Command>
+                                            </PopoverContent>
+                                        </Popover>
+
+                                        {selectedClusterForAdd && (
+                                            <GraveModal
+                                                clusterId={selectedClusterForAdd}
+                                                clusterName={clusters.find(c => c.id === selectedClusterForAdd)?.name ?? ""}
+                                                onGraveAdded={handleGraveAdded}
+                                            />
+                                        )}
+                                    </ButtonGroup>
+                                </div>
+                            </div>
+                        </CardHeader>
+                        <CardContent>
+                            {/* Search */}
+                            <div className="relative mb-4">
+                                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
+                                <Input
+                                    placeholder="Search graves by name, plot, type, or notes..."
+                                    value={searchTerm}
+                                    onChange={(e) => setSearchTerm(e.target.value)}
+                                    className="pl-10"
+                                />
+                            </div>
+
+                            {/* Graves List Grouped by Cluster */}
+                            {isLoading ? (
+                                <p>Loading graves...</p>
+                            ) : Array.isArray(paginatedGraves) && paginatedGraves.length > 0 ? (
+                                <div className="space-y-6">
+                                    {Array.isArray(clusters) && clusters.map((cluster) => {
+                                        const clusterGraves = paginatedGraves.filter(grave => grave.graveClusterId === cluster.id);
+
+                                        if (clusterGraves.length === 0) return null;
+
+                                        return (
+                                            <div key={cluster.id} className="border rounded-lg p-4">
+                                                <div className="flex items-center justify-between mb-3 pb-2 border-b">
+                                                    <div>
+                                                        <h3 className="font-semibold text-lg">{cluster.name}</h3>
+                                                        <p className="text-sm text-gray-500">
+                                                            Cluster #{cluster.clusterNumber} • {clusterGraves.length} graves
+                                                        </p>
+                                                    </div>
+                                                    <div className="flex items-center gap-2">
+                                                        <Badge variant="outline">
+                                                            {clusterGraves.length} graves
+                                                        </Badge>
+                                                        <Button
+                                                            variant="outline"
+                                                            size="sm"
+                                                            onClick={() => handleOpenInstructionDrawer(cluster)}
+                                                            className="h-8 px-3"
+                                                        >
+                                                            <BookOpen className="h-4 w-4 mr-1" />
+                                                            Instructions
+                                                        </Button>
+                                                    </div>
+                                                </div>
+
+                                                <div className="space-y-2">
+                                                    {clusterGraves.map((grave) => {
+                                                        const graveData = grave.graveJson as Record<string, unknown>;
+                                                        return (
+                                                            <div key={grave.id} className="p-3 border rounded-lg bg-gray-50">
+                                                                <div className="flex items-center justify-between">
+                                                                    <div className="flex-1">
+                                                                        <div className="font-medium">
+                                                                            <HighlightText
+                                                                                text={typeof graveData.deceasedName === 'string' ? graveData.deceasedName : ""}
+                                                                                searchTerm={debouncedSearchTerm}
+                                                                                highlightClassName="bg-yellow-200 font-semibold"
+                                                                            />
+                                                                        </div>
+                                                                        <div className="text-sm text-gray-500">
+                                                                            Plot <HighlightText
+                                                                                text={typeof graveData.plotNumber === 'string' ? graveData.plotNumber : ""}
+                                                                                searchTerm={debouncedSearchTerm}
+                                                                                highlightClassName="bg-yellow-200 font-semibold"
+                                                                            />
+                                                                            {" • "}
+                                                                            {typeof graveData.birthDate === 'string' ? graveData.birthDate : ""}
+                                                                            {" - "}
+                                                                            {typeof graveData.deathDate === 'string' ? graveData.deathDate : ""}
+                                                                        </div>
+                                                                        {typeof graveData.notes === 'string' && graveData.notes.trim() && (
+                                                                            <div className="text-xs text-gray-400 mt-1">
+                                                                                <HighlightText
+                                                                                    text={graveData.notes}
+                                                                                    searchTerm={debouncedSearchTerm}
+                                                                                    highlightClassName="bg-yellow-200 font-semibold"
+                                                                                />
+                                                                            </div>
+                                                                        )}
+                                                                    </div>
+                                                                    <div className="flex items-center gap-2">
+                                                                        <Badge className={getGraveTypeColor(typeof graveData.graveType === 'string' ? graveData.graveType : "")}>
+                                                                            <HighlightText
+                                                                                text={typeof graveData.graveType === 'string' ? graveData.graveType : ""}
+                                                                                searchTerm={debouncedSearchTerm}
+                                                                                highlightClassName="bg-yellow-100 font-semibold"
+                                                                            />
+                                                                        </Badge>
+                                                                        <Button
+                                                                            variant="outline"
+                                                                            size="sm"
+                                                                            className="h-8 w-8 p-0"
+                                                                            onClick={() => handleOpenDrawer(grave)}
+                                                                        >
+                                                                            <Eye className="h-4 w-4" />
+                                                                        </Button>
+                                                                        <Button
+                                                                            variant="destructive"
+                                                                            size="sm"
+                                                                            className="h-8 w-8 p-0"
+                                                                            onClick={() => handleDeleteGrave(grave.id)}
+                                                                            disabled={deleteGrave.isPending}
+                                                                        >
+                                                                            <Trash2 className="h-4 w-4" />
+                                                                        </Button>
+                                                                    </div>
+                                                                </div>
+                                                            </div>
+                                                        );
+                                                    })}
+                                                </div>
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                            ) : debouncedSearchTerm ? (
+                                <p className="text-gray-500 text-center py-8">
+                                    No graves found matching &quot;{debouncedSearchTerm}&quot;
+                                </p>
+                            ) : (
+                                <p className="text-gray-500 text-center py-8">
+                                    No graves found. Add some graves to get started.
+                                </p>
+                            )}
+
+                            {/* Pagination */}
+                            {totalPages > 1 && (
+                                <div className="flex items-center justify-between mt-6 pt-4 border-t">
+                                    <div className="text-sm text-gray-500">
+                                        Showing {startIndex + 1} to {Math.min(endIndex, Array.isArray(graves) ? graves.length : 0)} of {Array.isArray(graves) ? graves.length : 0} graves
+                                    </div>
+                                    <div className="flex items-center gap-2">
+                                        <Button
+                                            variant="outline"
+                                            size="sm"
+                                            onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
+                                            disabled={currentPage === 1}
+                                        >
+                                            <ChevronLeft className="h-4 w-4" />
+                                        </Button>
+                                        <span className="text-sm">
+                                            Page {currentPage} of {totalPages}
+                                        </span>
+                                        <Button
+                                            variant="outline"
+                                            size="sm"
+                                            onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
+                                            disabled={currentPage === totalPages}
+                                        >
+                                            <ChevronRight className="h-4 w-4" />
+                                        </Button>
+                                    </div>
+                                </div>
+                            )}
+                        </CardContent>
+                    </Card>
                 </ViewTransition>
             </div>
 
-            {/* Graves List - 50% right */}
-            <div className="w-1/2 min-h-0 p-4 space-y-4 relative z-10">
-                <Card>
-                    <CardHeader>
-                        <div className="flex items-center justify-between">
-                            <div>
-                                <CardTitle>All Graves</CardTitle>
-                                <p className="text-sm text-gray-600">
-                                    {filteredGraves.length} graves found
-                                </p>
-                            </div>
-                            <div className="flex gap-2">
-                                <Popover open={comboboxOpen} onOpenChange={setComboboxOpen}>
-                                    <PopoverTrigger asChild>
-                                        <Button
-                                            variant="outline"
-                                            role="combobox"
-                                            aria-expanded={comboboxOpen}
-                                            className="w-[200px] justify-between"
-                                        >
-                                            {selectedClusterForAdd
-                                                ? clusters.find((cluster) => cluster.id === selectedClusterForAdd)?.name
-                                                : "Select cluster..."}
-                                            <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-                                        </Button>
-                                    </PopoverTrigger>
-                                    <PopoverContent className="w-[200px] p-0">
-                                        <Command>
-                                            <CommandInput placeholder="Search clusters..." />
-                                            <CommandList>
-                                                <CommandEmpty>No cluster found.</CommandEmpty>
-                                                <CommandGroup>
-                                                    {clusters.map((cluster) => (
-                                                        <CommandItem
-                                                            key={cluster.id}
-                                                            value={cluster.id}
-                                                            onSelect={(currentValue) => {
-                                                                setSelectedClusterForAdd(currentValue === selectedClusterForAdd ? "" : currentValue)
-                                                                setComboboxOpen(false)
-                                                            }}
-                                                        >
-                                                            <Check
-                                                                className={`mr-2 h-4 w-4 ${selectedClusterForAdd === cluster.id ? "opacity-100" : "opacity-0"
-                                                                    }`}
-                                                            />
-                                                            {cluster.name}
-                                                        </CommandItem>
-                                                    ))}
-                                                </CommandGroup>
-                                            </CommandList>
-                                        </Command>
-                                    </PopoverContent>
-                                </Popover>
+            {/* Grave Details Drawer */}
+            <Drawer open={drawerOpen} onOpenChange={setDrawerOpen}>
+                <DrawerContent>
+                    <DrawerHeader>
+                        <DrawerTitle>Grave Details</DrawerTitle>
+                        <DrawerDescription>
+                            Detailed information about the selected grave
+                        </DrawerDescription>
+                    </DrawerHeader>
+                    <div className="p-4 space-y-4">
+                        {selectedGrave && (() => {
+                            const graveData = selectedGrave.graveJson as Record<string, unknown> | null;
+                            const getStringValue = (value: unknown): string => {
+                                return typeof value === 'string' ? value : 'N/A';
+                            };
 
-                                {selectedClusterForAdd && (
-                                    <GraveModal
-                                        clusterId={selectedClusterForAdd}
-                                        clusterName={clusters.find(c => c.id === selectedClusterForAdd)?.name || ""}
-                                        onGraveAdded={handleGraveAdded}
-                                    />
-                                )}
-                            </div>
-                        </div>
-                    </CardHeader>
-                    <CardContent>
-                        {/* Search */}
-                        <div className="relative mb-4">
-                            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
-                            <Input
-                                placeholder="Search graves by name, plot, type, or notes..."
-                                value={searchTerm}
-                                onChange={(e) => setSearchTerm(e.target.value)}
-                                className="pl-10"
-                            />
-                        </div>
-
-                        {/* Graves List Grouped by Cluster */}
-                        {gravesLoading ? (
-                            <p>Loading graves...</p>
-                        ) : Array.isArray(paginatedGraves) && paginatedGraves.length > 0 ? (
-                            <div className="space-y-6">
-                                {Array.isArray(clusters) && clusters.map((cluster) => {
-                                    const clusterGraves = paginatedGraves.filter(grave => grave.graveClusterId === cluster.id);
-
-                                    if (clusterGraves.length === 0) return null;
-
-                                    return (
-                                        <div key={cluster.id} className="border rounded-lg p-4">
-                                            <div className="flex items-center justify-between mb-3 pb-2 border-b">
-                                                <div>
-                                                    <h3 className="font-semibold text-lg">{cluster.name}</h3>
-                                                    <p className="text-sm text-gray-500">
-                                                        Cluster #{cluster.clusterNumber} • {clusterGraves.length} graves
-                                                    </p>
-                                                </div>
-                                                <Badge variant="outline">
-                                                    {clusterGraves.length} graves
+                            return (
+                                <div className="space-y-4">
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                        <div>
+                                            <label className="text-sm font-medium text-gray-500">Deceased Name</label>
+                                            <p className="text-lg font-semibold">
+                                                {getStringValue(graveData?.deceasedName)}
+                                            </p>
+                                        </div>
+                                        <div>
+                                            <label className="text-sm font-medium text-gray-500">Plot Number</label>
+                                            <p className="text-lg">
+                                                {getStringValue(graveData?.plotNumber)}
+                                            </p>
+                                        </div>
+                                        <div>
+                                            <label className="text-sm font-medium text-gray-500">Birth Date</label>
+                                            <p className="text-lg">
+                                                {getStringValue(graveData?.birthDate)}
+                                            </p>
+                                        </div>
+                                        <div>
+                                            <label className="text-sm font-medium text-gray-500">Death Date</label>
+                                            <p className="text-lg">
+                                                {getStringValue(graveData?.deathDate)}
+                                            </p>
+                                        </div>
+                                        <div>
+                                            <label className="text-sm font-medium text-gray-500">Grave Type</label>
+                                            <div className="mt-1">
+                                                <Badge className={getGraveTypeColor(getStringValue(graveData?.graveType))}>
+                                                    {getStringValue(graveData?.graveType)}
                                                 </Badge>
                                             </div>
+                                        </div>
+                                        <div>
+                                            <label className="text-sm font-medium text-gray-500">Cluster</label>
+                                            <p className="text-lg">
+                                                {clusters.find(c => c.id === selectedGrave.graveClusterId)?.name ?? 'N/A'}
+                                            </p>
+                                        </div>
+                                    </div>
 
-                                            <div className="space-y-2">
-                                                {clusterGraves.map((grave) => {
-                                                    const graveData = grave.graveJson as Record<string, unknown>;
-                                                    return (
-                                                        <div key={grave.id} className="p-3 border rounded-lg bg-gray-50">
-                                                            <div className="flex items-center justify-between">
-                                                                <div className="flex-1">
-                                                                    <div className="font-medium">{typeof graveData.deceasedName === 'string' ? graveData.deceasedName : ""}</div>
-                                                                    <div className="text-sm text-gray-500">
-                                                                        Plot {typeof graveData.plotNumber === 'string' ? graveData.plotNumber : ""} • {typeof graveData.birthDate === 'string' ? graveData.birthDate : ""} - {typeof graveData.deathDate === 'string' ? graveData.deathDate : ""}
-                                                                    </div>
-                                                                    {graveData.notes && typeof graveData.notes === 'string' && graveData.notes.trim() && (
-                                                                        <div className="text-xs text-gray-400 mt-1">
-                                                                            {graveData.notes}
+                                    {(() => {
+                                        const notes = graveData?.notes;
+                                        if (notes && typeof notes === 'string' && notes.trim()) {
+                                            return (
+                                                <div>
+                                                    <label className="text-sm font-medium text-gray-500">Notes</label>
+                                                    <p className="text-lg mt-1 p-3 bg-gray-50 rounded-lg">
+                                                        {notes}
+                                                    </p>
+                                                </div>
+                                            );
+                                        }
+                                        return null;
+                                    })()}
+
+                                    <div className="pt-4 border-t">
+                                        <div className="flex justify-between items-center">
+                                            <div>
+                                                <label className="text-sm font-medium text-gray-500">Grave ID</label>
+                                                <p className="text-sm font-mono text-gray-600">{selectedGrave.id}</p>
+                                            </div>
+                                            <div className="flex gap-2">
+                                                <Button
+                                                    variant="outline"
+                                                    onClick={() => setDrawerOpen(false)}
+                                                >
+                                                    Close
+                                                </Button>
+                                                <Button
+                                                    variant="destructive"
+                                                    onClick={() => {
+                                                        handleDeleteGrave(selectedGrave.id);
+                                                        setDrawerOpen(false);
+                                                    }}
+                                                    disabled={deleteGrave.isPending}
+                                                >
+                                                    <Trash2 className="h-4 w-4 mr-2" />
+                                                    Delete Grave
+                                                </Button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            );
+                        })()}
+                    </div>
+                </DrawerContent>
+            </Drawer>
+
+            {/* Instruction Drawer */}
+            <Drawer open={instructionDrawerOpen} onOpenChange={setInstructionDrawerOpen}>
+                <DrawerContent className="h-[90vh]">
+                    <DrawerHeader className="flex-shrink-0">
+                        <DrawerTitle>Cluster Instructions</DrawerTitle>
+                        <DrawerDescription>
+                            Add step-by-step instructions with images for {selectedCluster?.name}
+                        </DrawerDescription>
+                    </DrawerHeader>
+                    <div className="flex-1 overflow-y-auto p-4 space-y-4 scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-gray-100">
+                        {selectedCluster && (
+                            <div className="space-y-4 pb-4">
+                                {isLoadingInstructions ? (
+                                    <div className="text-center py-8 text-gray-500">
+                                        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900 mx-auto mb-4"></div>
+                                        <p>Loading instructions...</p>
+                                    </div>
+                                ) : (
+                                    <div>
+                                        <div className="flex items-center justify-between">
+                                            <div>
+                                                <h3 className="text-lg font-semibold">{selectedCluster.name}</h3>
+                                                <p className="text-sm text-gray-500">Cluster #{selectedCluster.clusterNumber}</p>
+                                            </div>
+                                            <Button onClick={addInstructionStep} className="flex items-center gap-2">
+                                                <Plus className="h-4 w-4" />
+                                                Add Step
+                                            </Button>
+                                        </div>
+
+                                        {instructions.length === 0 ? (
+                                            <div className="text-center py-8 text-gray-500">
+                                                <BookOpen className="h-12 w-12 mx-auto mb-4 text-gray-300" />
+                                                <p>No instructions added yet.</p>
+                                                <p className="text-sm">Click &quot;Add Step&quot; to create your first instruction.</p>
+                                            </div>
+                                        ) : (
+                                            <div className="space-y-4">
+                                                {instructions.map((instruction) => (
+                                                    <div key={instruction.id} className="border rounded-lg p-4 bg-gray-50">
+                                                        <div className="flex items-center justify-between mb-3">
+                                                            <div className="flex items-center gap-2">
+                                                                <Badge variant="secondary">Step {instruction.step}</Badge>
+                                                                <Button
+                                                                    variant="ghost"
+                                                                    size="sm"
+                                                                    onClick={() => deleteInstructionStep(instruction.id)}
+                                                                    className="h-6 w-6 p-0 text-red-500 hover:text-red-700"
+                                                                >
+                                                                    <X className="h-4 w-4" />
+                                                                </Button>
+                                                            </div>
+                                                        </div>
+
+                                                        <div className="space-y-3">
+                                                            <div>
+                                                                <label className="text-sm font-medium text-gray-700">Step Title</label>
+                                                                <Input
+                                                                    value={instruction.title}
+                                                                    onChange={(e) => updateInstructionStep(instruction.id, 'title', e.target.value)}
+                                                                    placeholder="Enter step title..."
+                                                                    className="mt-1"
+                                                                />
+                                                            </div>
+
+                                                            <div>
+                                                                <label className="text-sm font-medium text-gray-700">Description</label>
+                                                                <textarea
+                                                                    value={instruction.description}
+                                                                    onChange={(e) => updateInstructionStep(instruction.id, 'description', e.target.value)}
+                                                                    placeholder="Enter step description..."
+                                                                    className="mt-1 w-full p-2 border rounded-md resize-none"
+                                                                    rows={3}
+                                                                />
+                                                            </div>
+
+                                                            <div>
+                                                                <label className="text-sm font-medium text-gray-700">Image</label>
+                                                                <div className="mt-1">
+                                                                    {instruction.image ? (
+                                                                        <div className="space-y-2">
+                                                                            <Image
+                                                                                src={instruction.image}
+                                                                                alt={`Step ${instruction.step}`}
+                                                                                width={1000}
+                                                                                height={1000}
+                                                                                className="w-full max-w-md h-48 object-cover rounded-md border"
+                                                                            />
+                                                                            <Button
+                                                                                variant="outline"
+                                                                                size="sm"
+                                                                                onClick={() => updateInstructionStep(instruction.id, 'image', '')}
+                                                                                className="text-red-500 hover:text-red-700"
+                                                                            >
+                                                                                <X className="h-4 w-4 mr-1" />
+                                                                                Remove Image
+                                                                            </Button>
+                                                                        </div>
+                                                                    ) : (
+                                                                        <div className="border-2 border-dashed border-gray-300 rounded-lg p-4 text-center">
+                                                                            <input
+                                                                                type="file"
+                                                                                accept="image/*"
+                                                                                onChange={(e) => {
+                                                                                    const file = e.target.files?.[0];
+                                                                                    if (file) handleImageUpload(instruction.id, file);
+                                                                                }}
+                                                                                className="hidden"
+                                                                                id={`image-upload-${instruction.id}`}
+                                                                            />
+                                                                            <label
+                                                                                htmlFor={`image-upload-${instruction.id}`}
+                                                                                className="cursor-pointer flex flex-col items-center gap-2"
+                                                                            >
+                                                                                <Upload className="h-8 w-8 text-gray-400" />
+                                                                                <span className="text-sm text-gray-500">Click to upload image</span>
+                                                                            </label>
                                                                         </div>
                                                                     )}
                                                                 </div>
-                                                                <div className="flex items-center gap-2">
-                                                                    <Badge className={getGraveTypeColor(typeof graveData.graveType === 'string' ? graveData.graveType : "")}>
-                                                                        {typeof graveData.graveType === 'string' ? graveData.graveType : ""}
-                                                                    </Badge>
-                                                                    <Button
-                                                                        variant="destructive"
-                                                                        size="sm"
-                                                                        className="h-8 w-8 p-0"
-                                                                        onClick={() => handleDeleteGrave(grave.id)}
-                                                                        disabled={deleteGrave.isPending}
-                                                                    >
-                                                                        <Trash2 className="h-4 w-4" />
-                                                                    </Button>
-                                                                </div>
                                                             </div>
                                                         </div>
-                                                    );
-                                                })}
+                                                    </div>
+                                                ))}
                                             </div>
-                                        </div>
-                                    );
-                                })}
+                                        )}
+                                    </div>
+                                )}
                             </div>
-                        ) : searchTerm ? (
-                            <p className="text-gray-500 text-center py-8">
-                                No graves found matching &quot;{searchTerm}&quot;
-                            </p>
-                        ) : (
-                            <p className="text-gray-500 text-center py-8">
-                                No graves found. Add some graves to get started.
-                            </p>
                         )}
-
-                        {/* Pagination */}
-                        {totalPages > 1 && (
-                            <div className="flex items-center justify-between mt-6 pt-4 border-t">
+                    </div>
+                    {instructions.length > 0 && (
+                        <div className="flex-shrink-0 pt-4 border-t bg-white">
+                            <div className="flex justify-between items-center p-4">
                                 <div className="text-sm text-gray-500">
-                                    Showing {startIndex + 1} to {Math.min(endIndex, filteredGraves.length)} of {filteredGraves.length} graves
+                                    {instructions.length} step{instructions.length !== 1 ? 's' : ''} added
                                 </div>
-                                <div className="flex items-center gap-2">
+                                <div className="flex gap-2">
                                     <Button
                                         variant="outline"
-                                        size="sm"
-                                        onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
-                                        disabled={currentPage === 1}
+                                        onClick={() => setInstructionDrawerOpen(false)}
                                     >
-                                        <ChevronLeft className="h-4 w-4" />
+                                        Close
                                     </Button>
-                                    <span className="text-sm">
-                                        Page {currentPage} of {totalPages}
-                                    </span>
                                     <Button
-                                        variant="outline"
-                                        size="sm"
-                                        onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
-                                        disabled={currentPage === totalPages}
+                                        onClick={() => {
+                                            if (selectedCluster) {
+                                                saveInstructions.mutate({
+                                                    clusterId: selectedCluster.id,
+                                                    steps: instructions
+                                                });
+                                            }
+                                        }}
+                                        disabled={saveInstructions.isPending}
                                     >
-                                        <ChevronRight className="h-4 w-4" />
+                                        {saveInstructions.isPending ? "Saving..." : "Save Instructions"}
                                     </Button>
                                 </div>
                             </div>
-                        )}
-                    </CardContent>
-                </Card>
-            </div>
+                        </div>
+                    )}
+                </DrawerContent>
+            </Drawer>
         </div>
     )
 }

@@ -13,7 +13,7 @@ import { Plus } from "lucide-react";
 interface GraveModalProps {
     clusterId: string;
     clusterName: string;
-    onGraveAdded?: (grave: any) => void;
+    onGraveAdded?: () => void;
 }
 
 export function GraveModal({ clusterId, clusterName, onGraveAdded }: GraveModalProps) {
@@ -75,7 +75,7 @@ export function GraveModal({ clusterId, clusterName, onGraveAdded }: GraveModalP
     return (
         <Dialog open={open} onOpenChange={setOpen}>
             <DialogTrigger asChild>
-                <Button size="sm" className="h-8">
+                <Button>
                     <Plus className="h-4 w-4 mr-1" />
                     Add Grave
                 </Button>

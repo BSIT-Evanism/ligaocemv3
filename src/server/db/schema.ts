@@ -119,25 +119,39 @@ export const graveDetails = createTable("grave_details", {
     .notNull(),
 });
 
-export const graveInstructions = createTable("grave_instructions", {
+export const clusterInstructions = createTable("cluster_instructions", {
   id: text("id").primaryKey(),
-  graveDetailsId: text("grave_details_id")
+  graveClusterId: text("grave_cluster_id")
     .notNull()
-    .references(() => graveDetails.id, { onDelete: "cascade" }),
+    .references(() => graveCluster.id, { onDelete: "cascade" }),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at")
     .$onUpdate(() => /* @__PURE__ */ new Date())
     .notNull(),
 });
 
-export const graveInstructionSteps = createTable("grave_instruction_steps", {
+export const clusterInstructionSteps = createTable("cluster_instruction_steps", {
   id: text("id").primaryKey(),
   step: integer("step").notNull(),
   instruction: text("instruction").notNull(),
   imageUrl: text("image_url"),
-  graveInstructionsId: text("grave_instructions_id")
+  clusterInstructionsId: text("cluster_instructions_id")
     .notNull()
-    .references(() => graveInstructions.id, { onDelete: "cascade" }),
+    .references(() => clusterInstructions.id, { onDelete: "cascade" }),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at")
+    .$onUpdate(() => /* @__PURE__ */ new Date())
+    .notNull(),
+});
+
+export const gravePicture = createTable("grave_picture", {
+  id: text("id").primaryKey(),
+  imageUrl: text("image_url").notNull(),
+  imageAlt: text("image_alt"),
+  description: text("description"),
+  graveDetailsId: text("grave_details_id")
+    .notNull()
+    .references(() => graveDetails.id, { onDelete: "cascade" }),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at")
     .$onUpdate(() => /* @__PURE__ */ new Date())
@@ -238,4 +252,52 @@ export const requestGraveRelationRelations = relations(requestGraveRelation, ({ 
 export const userRelations = relations(user, ({ many }) => ({
   requests: many(request),
   graveRelatedUsers: many(graveRelatedUsers),
+}));
+
+export const graveRelatedUsersRelations = relations(graveRelatedUsers, ({ one }) => ({
+  user: one(user, {
+    fields: [graveRelatedUsers.userId],
+    references: [user.id],
+  }),
+  graveDetails: one(graveDetails, {
+    fields: [graveRelatedUsers.graveDetailsId],
+    references: [graveDetails.id],
+  }),
+}));
+
+export const graveDetailsRelations = relations(graveDetails, ({ one, many }) => ({
+  graveCluster: one(graveCluster, {
+    fields: [graveDetails.graveClusterId],
+    references: [graveCluster.id],
+  }),
+  graveRelatedUsers: many(graveRelatedUsers),
+  requestGraveRelations: many(requestGraveRelation),
+  gravePictures: many(gravePicture),
+}));
+
+export const graveClusterRelations = relations(graveCluster, ({ many }) => ({
+  graveDetails: many(graveDetails),
+  clusterInstructions: many(clusterInstructions),
+}));
+
+export const clusterInstructionsRelations = relations(clusterInstructions, ({ one, many }) => ({
+  graveCluster: one(graveCluster, {
+    fields: [clusterInstructions.graveClusterId],
+    references: [graveCluster.id],
+  }),
+  clusterInstructionSteps: many(clusterInstructionSteps),
+}));
+
+export const clusterInstructionStepsRelations = relations(clusterInstructionSteps, ({ one }) => ({
+  clusterInstructions: one(clusterInstructions, {
+    fields: [clusterInstructionSteps.clusterInstructionsId],
+    references: [clusterInstructions.id],
+  }),
+}));
+
+export const gravePictureRelations = relations(gravePicture, ({ one }) => ({
+  graveDetails: one(graveDetails, {
+    fields: [gravePicture.graveDetailsId],
+    references: [graveDetails.id],
+  }),
 }));

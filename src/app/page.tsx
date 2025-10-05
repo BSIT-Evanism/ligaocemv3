@@ -23,7 +23,7 @@ export default async function Home() {
               Get started today and experience the difference.
             </p>
             <div className="flex flex-col sm:flex-row gap-4 justify-center">
-              <Link href="/login">
+              <Link href="/search">
                 <ViewTransition name="cta-login">
                   <Button size="lg" className="bg-black hover:bg-gray-800 text-white px-8 py-3">
                     Get Started
