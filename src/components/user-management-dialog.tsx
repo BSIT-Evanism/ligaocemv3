@@ -19,7 +19,7 @@ import {
     SelectTrigger,
     SelectValue,
 } from "@/components/ui/select"
-import { User } from "@/components/user-data-table"
+import { type User } from "@/components/user-data-table"
 
 interface UserManagementDialogProps {
     open: boolean
@@ -42,10 +42,10 @@ export function UserManagementDialog({
     mode
 }: UserManagementDialogProps) {
     const [formData, setFormData] = useState({
-        email: user?.email || "",
+        email: user?.email ?? "",
         password: "",
-        name: user?.name || "",
-        role: user?.role || "user"
+        name: user?.name ?? "",
+        role: user?.role ?? "user"
     })
     const [isLoading, setIsLoading] = useState(false)
     const [error, setError] = useState<string | null>(null)
@@ -67,7 +67,7 @@ export function UserManagementDialog({
                     role: "user"
                 })
             } else {
-                setError(result.error || "An error occurred")
+                setError(result.error ?? "An error occurred")
             }
         } catch (err) {
             setError(err instanceof Error ? err.message : "An unexpected error occurred")

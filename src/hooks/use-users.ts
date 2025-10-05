@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react"
 import { authClient } from "@/lib/auth-client"
-import { User } from "@/components/user-data-table"
+import { type User } from "@/components/user-data-table"
 
 interface UseUsersOptions {
     limit?: number
@@ -67,13 +67,13 @@ export function useUsers(options: UseUsersOptions = {}): UseUsersReturn {
             })
 
             if (fetchError) {
-                setError(fetchError.message || "Failed to fetch users")
+                setError(fetchError.message ?? "Failed to fetch users")
                 return
             }
 
             if (data) {
-                setUsers(data.users || [])
-                setTotal(data.total || 0)
+                setUsers(data.users ?? [])
+                setTotal(data.total ?? 0)
             }
         } catch (err) {
             setError(err instanceof Error ? err.message : "An unexpected error occurred")
@@ -93,11 +93,11 @@ export function useUsers(options: UseUsersOptions = {}): UseUsersReturn {
                 email: userData.email,
                 password: userData.password,
                 name: userData.name,
-                role: userData.role || "user"
+                role: userData.role ?? "user"
             })
 
             if (createError) {
-                return { success: false, error: createError.message || "Failed to create user" }
+                return { success: false, error: createError.message ?? "Failed to create user" }
             }
 
             // Refresh the user list
@@ -115,11 +115,11 @@ export function useUsers(options: UseUsersOptions = {}): UseUsersReturn {
         try {
             const { error: banError } = await authClient.admin.banUser({
                 userId,
-                banReason: banReason || "No reason provided"
+                banReason: banReason ?? "No reason provided"
             })
 
             if (banError) {
-                return { success: false, error: banError.message || "Failed to ban user" }
+                return { success: false, error: banError.message ?? "Failed to ban user" }
             }
 
             // Refresh the user list
@@ -140,7 +140,7 @@ export function useUsers(options: UseUsersOptions = {}): UseUsersReturn {
             })
 
             if (unbanError) {
-                return { success: false, error: unbanError.message || "Failed to unban user" }
+                return { success: false, error: unbanError.message ?? "Failed to unban user" }
             }
 
             // Refresh the user list
@@ -161,7 +161,7 @@ export function useUsers(options: UseUsersOptions = {}): UseUsersReturn {
             })
 
             if (deleteError) {
-                return { success: false, error: deleteError.message || "Failed to delete user" }
+                return { success: false, error: deleteError.message ?? "Failed to delete user" }
             }
 
             // Refresh the user list
@@ -183,7 +183,7 @@ export function useUsers(options: UseUsersOptions = {}): UseUsersReturn {
             })
 
             if (roleError) {
-                return { success: false, error: roleError.message || "Failed to update user role" }
+                return { success: false, error: roleError.message ?? "Failed to update user role" }
             }
 
             // Refresh the user list
@@ -205,7 +205,7 @@ export function useUsers(options: UseUsersOptions = {}): UseUsersReturn {
             })
 
             if (passwordError) {
-                return { success: false, error: passwordError.message || "Failed to update user password" }
+                return { success: false, error: passwordError.message ?? "Failed to update user password" }
             }
 
             return { success: true }
@@ -218,7 +218,7 @@ export function useUsers(options: UseUsersOptions = {}): UseUsersReturn {
     }
 
     useEffect(() => {
-        fetchUsers()
+        void fetchUsers()
     }, [limit, offset, searchValue, searchField, searchOperator, sortBy, sortDirection])
 
     return {

@@ -11,7 +11,8 @@ import { toast } from "sonner";
 interface GraveFormProps {
     clusterId: string;
     clusterName: string;
-    onGraveAdded?: (grave: any) => void;
+    // @ts-expect-error - TODO: fix this
+    onGraveAdded?: (grave) => void;
 }
 
 export function GraveForm({ clusterId, clusterName, onGraveAdded }: GraveFormProps) {

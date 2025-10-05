@@ -17,7 +17,7 @@ import {
     SelectTrigger,
     SelectValue,
 } from "@/components/ui/select"
-import { User } from "@/components/user-data-table"
+import { type User } from "@/components/user-data-table"
 
 interface RoleChangeDialogProps {
     open: boolean
@@ -54,7 +54,7 @@ export function RoleChangeDialog({
             if (result.success) {
                 onOpenChange(false)
             } else {
-                setError(result.error || "An error occurred")
+                setError(result.error ?? "An error occurred")
             }
         } catch (err) {
             setError(err instanceof Error ? err.message : "An unexpected error occurred")
@@ -66,7 +66,7 @@ export function RoleChangeDialog({
     const handleOpenChange = (newOpen: boolean) => {
         if (!newOpen) {
             setError(null)
-            setSelectedRole(user?.role || "")
+            setSelectedRole(user?.role ?? "")
         }
         onOpenChange(newOpen)
     }
