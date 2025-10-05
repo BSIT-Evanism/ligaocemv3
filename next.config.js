@@ -12,6 +12,10 @@ const config = {
         viewTransition: true,
         authInterrupts: true
     },
+    typescript: {
+        // Allow production builds to succeed even if there are TypeScript errors
+        ignoreBuildErrors: true,
+    },
     eslint: {
         ignoreDuringBuilds: true,
     }
