@@ -20,7 +20,6 @@ import { Info, List, BookOpen, MapPin, Navigation, Crosshair, Navigation2, Messa
 import { useMapStore } from "@/lib/store";
 import { useSession } from "@/lib/auth-client";
 import { toast } from "sonner";
-import { ViewTransition } from "react";
 
 type Cluster = {
     id: string;
@@ -295,19 +294,17 @@ export default function PublicMapPage() {
         <div className="relative h-[calc(100vh-64px)] w-full md:h-[calc(100vh-250px)]">
             {isMobile ? (
                 <div className="h-full w-full">
-                    <ViewTransition name="right-card-island">
-                        <Map
-                            className="h-[calc(100vh-250px)] w-full"
-                            center={center}
-                            zoom={16}
-                            maxZoom={19}
-                            enableAddPolyline={false}
-                            polygon={polygon}
-                            polygonColor="#22c55e"
-                            clusters={clusters}
-                            onClusterClickAction={(c) => { setSelected(c); setOpenClusterId(c.id); }}
-                        />
-                    </ViewTransition>
+                    <Map
+                        className="h-[calc(100vh-250px)] w-full"
+                        center={center}
+                        zoom={16}
+                        maxZoom={19}
+                        enableAddPolyline={false}
+                        polygon={polygon}
+                        polygonColor="#22c55e"
+                        clusters={clusters}
+                        onClusterClickAction={(c) => { setSelected(c); setOpenClusterId(c.id); }}
+                    />
 
                     <div className="pointer-events-none absolute right-3 top-3 z-[1000] flex gap-2">
                         <button
@@ -576,21 +573,19 @@ export default function PublicMapPage() {
             ) : (
                 <div className="h-full w-full gap-4 md:flex">
                     <div className="h-full w-1/2">
-                        <ViewTransition name="right-card-island">
-                            <Map
-                                className="h-full w-full"
-                                center={center}
-                                zoom={16}
-                                maxZoom={19}
-                                enableAddPolyline={false}
-                                polygon={polygon}
-                                polygonColor="#22c55e"
-                                clusters={clusters}
-                                enableAddMarkers={false}
-                                enableLocateControl={true}
-                                onClusterClickAction={(c) => setSelected(c as Cluster)}
-                            />
-                        </ViewTransition>
+                        <Map
+                            className="h-full w-full"
+                            center={center}
+                            zoom={16}
+                            maxZoom={19}
+                            enableAddPolyline={false}
+                            polygon={polygon}
+                            polygonColor="#22c55e"
+                            clusters={clusters}
+                            enableAddMarkers={false}
+                            enableLocateControl={true}
+                            onClusterClickAction={(c) => setSelected(c as Cluster)}
+                        />
 
                         <div className="pointer-events-none absolute right-3 top-3 z-[1000] flex gap-2">
                             <button

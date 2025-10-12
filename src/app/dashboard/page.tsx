@@ -7,7 +7,7 @@ import Link from "next/link"
 import { useSession } from "@/lib/auth-client"
 import { api } from "@/trpc/react"
 import { polygon } from "leaflet"
-import { useEffect, useMemo, useState, ViewTransition } from "react"
+import { useEffect, useMemo, useState } from "react"
 import dynamic from "next/dynamic"
 const Map = dynamic(() => import("@/components/Map"), { ssr: false });
 
@@ -222,19 +222,17 @@ export default function DashboardPage() {
                 <p className="text-sm text-slate-500">Interactive view of cemetery clusters</p>
               </CardHeader>
               <CardContent className="p-0 h-full">
-                <ViewTransition name="right-card-island">
-                  <Map
-                    className="h-full w-full rounded-b-xl"
-                    center={center}
-                    zoom={16}
-                    maxZoom={19}
-                    enableAddPolyline={false}
-                    polygon={polygon}
-                    polygonColor="#22c55e"
-                    clusters={clusters}
-                    enableAddMarkers={false}
-                  />
-                </ViewTransition>
+                <Map
+                  className="h-full w-full rounded-b-xl"
+                  center={center}
+                  zoom={16}
+                  maxZoom={19}
+                  enableAddPolyline={false}
+                  polygon={polygon}
+                  polygonColor="#22c55e"
+                  clusters={clusters}
+                  enableAddMarkers={false}
+                />
               </CardContent>
             </Card>
           </div>
