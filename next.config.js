@@ -7,7 +7,6 @@ import { env } from "./src/env.js";
 
 /** @type {import("next").NextConfig} */
 const config = {
-    reactCompiler: true,
     typedRoutes: true,
     experimental: {
         viewTransition: true,
