@@ -113,6 +113,7 @@ export const graveDetails = createTable("grave_details", {
   graveClusterId: text("grave_cluster_id")
     .notNull()
     .references(() => graveCluster.id, { onDelete: "cascade" }),
+  graveExpirationDate: timestamp("grave_expiration_date"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at")
     .$onUpdate(() => /* @__PURE__ */ new Date())
@@ -188,6 +189,21 @@ export const requestStatusTable = createTable("request_status", {
     .notNull(),
 });
 
+export const requestLogs = createTable("request_logs", {
+  id: text("id").primaryKey(),
+  requestId: text("request_id")
+    .notNull()
+    .references(() => request.id, { onDelete: "cascade" }),
+  userId: text("user_id")
+    .notNull()
+    .references(() => user.id, { onDelete: "cascade" }),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at")
+    .$onUpdate(() => /* @__PURE__ */ new Date())
+    .notNull(),
+  log: text("log").notNull(),
+});
+
 export const requestGraveRelation = createTable("request_grave_relation", {
   id: text("id").primaryKey(),
   requestId: text("request_id")
@@ -208,6 +224,7 @@ export const request = createTable("request", {
     .notNull()
     .references(() => user.id, { onDelete: "cascade" }),
   requestDetails: text("request_details").notNull(),
+  requestRelatedGrave: text("request_related_grave").references(() => graveDetails.id, { onDelete: "cascade" }),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at")
     .$onUpdate(() => /* @__PURE__ */ new Date())
@@ -218,7 +235,7 @@ export const request = createTable("request", {
 
 // Relations
 
-export const requestRelations = relations(request, ({ one }) => ({
+export const requestRelations = relations(request, ({ one, many }) => ({
   status: one(requestStatusTable, {
     fields: [request.id],
     references: [requestStatusTable.requestId],
@@ -235,6 +252,11 @@ export const requestRelations = relations(request, ({ one }) => ({
     fields: [request.userId],
     references: [user.id],
   }),
+  requestRelatedGrave: one(graveDetails, {
+    fields: [request.requestRelatedGrave],
+    references: [graveDetails.id],
+  }),
+  requestLogs: many(requestLogs),
 }));
 
 
@@ -250,9 +272,21 @@ export const requestGraveRelationRelations = relations(requestGraveRelation, ({ 
 }));
 
 
+export const requestLogsRelations = relations(requestLogs, ({ one }) => ({
+  request: one(request, {
+    fields: [requestLogs.requestId],
+    references: [request.id],
+  }),
+  user: one(user, {
+    fields: [requestLogs.userId],
+    references: [user.id],
+  }),
+}));
+
 export const userRelations = relations(user, ({ many }) => ({
   requests: many(request),
   graveRelatedUsers: many(graveRelatedUsers),
+  requestLogs: many(requestLogs),
 }));
 
 export const graveRelatedUsersRelations = relations(graveRelatedUsers, ({ one }) => ({

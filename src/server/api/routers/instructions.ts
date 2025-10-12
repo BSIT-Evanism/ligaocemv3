@@ -1,80 +1,8 @@
 import { clusterInstructions, clusterInstructionSteps } from "@/server/db/schema";
-import { authenticatedProcedure, createTRPCRouter } from "../trpc";
+import { adminProcedure, authenticatedProcedure, createTRPCRouter } from "../trpc";
 import { z } from "zod";
 import { eq } from "drizzle-orm";
-import { writeFile, mkdir } from "fs/promises";
-import { join } from "path";
-import { existsSync } from "fs";
-
-// Ensure uploads directory exists
-const ensureUploadsDir = async () => {
-    const uploadsDir = join(process.cwd(), "public", "uploads", "instructions");
-    if (!existsSync(uploadsDir)) {
-        await mkdir(uploadsDir, { recursive: true });
-    }
-    return uploadsDir;
-};
-
-// Save base64 image to local storage with custom ID
-const saveImage = async (base64Data: string, customId: string): Promise<{ imageUrl: string, customId: string }> => {
-    try {
-        console.log('Saving image with custom ID:', customId);
-        const uploadsDir = await ensureUploadsDir();
-        console.log('Uploads directory:', uploadsDir);
-
-        // Remove data URL prefix
-        const base64String = base64Data.replace(/^data:image\/[a-z]+;base64,/, "");
-        const buffer = Buffer.from(base64String, "base64");
-
-        // Extract file extension from base64 data
-        const match = /data:image\/([a-z]+);base64/.exec(base64Data);
-        const mimeType = match?.[1] ?? 'jpg';
-        const filename = `${customId}.${mimeType}`;
-
-        const filePath = join(uploadsDir, filename);
-        console.log('Saving file to:', filePath);
-        await writeFile(filePath, buffer);
-
-        const imageUrl = `/uploads/instructions/${filename}`;
-        console.log('Image saved successfully:', imageUrl);
-
-        return {
-            imageUrl,
-            customId
-        };
-    } catch (error) {
-        console.error('Error saving image:', error);
-        throw new Error(`Failed to save image: ${error instanceof Error ? error.message : 'Unknown error'}`);
-    }
-};
-
-// Delete image by custom ID
-const deleteImage = async (customId: string): Promise<void> => {
-    if (!customId) {
-        console.warn('No custom ID provided for deletion');
-        return;
-    }
-
-    try {
-        const uploadsDir = await ensureUploadsDir();
-        // Try to find and delete the file with this custom ID
-        const fs = await import('fs/promises');
-        const path = await import('path');
-
-        // Look for files with this custom ID (regardless of extension)
-        const files = await fs.readdir(uploadsDir);
-        const fileToDelete = files.find(file => file.startsWith(customId));
-
-        if (fileToDelete) {
-            const filePath = path.join(uploadsDir, fileToDelete);
-            await fs.unlink(filePath);
-            console.log(`Deleted image: ${fileToDelete}`);
-        }
-    } catch (error) {
-        console.error('Error deleting image:', error);
-        // Don't throw error for image deletion failures
-    }
-};
+import { utapi } from "@/server/uploadthing";
 
 export const instructionsRouter = createTRPCRouter({
     // Test endpoint to check database schema
@@ -162,7 +90,7 @@ export const instructionsRouter = createTRPCRouter({
     }),
 
     // Add a new step to instructions
-    addStep: authenticatedProcedure.input(z.object({
+    addStep: adminProcedure.input(z.object({
         clusterId: z.string(),
         title: z.string(),
         description: z.string(),
@@ -217,7 +145,7 @@ export const instructionsRouter = createTRPCRouter({
     }),
 
     // Update a step
-    updateStep: authenticatedProcedure.input(z.object({
+    updateStep: adminProcedure.input(z.object({
         stepId: z.string(),
         title: z.string(),
         description: z.string(),
@@ -235,7 +163,7 @@ export const instructionsRouter = createTRPCRouter({
     }),
 
     // Delete a step
-    deleteStep: authenticatedProcedure.input(z.object({
+    deleteStep: adminProcedure.input(z.object({
         stepId: z.string(),
     })).mutation(async ({ ctx, input }) => {
         // Get step to delete its image if it has one
@@ -245,8 +173,18 @@ export const instructionsRouter = createTRPCRouter({
             .where(eq(clusterInstructionSteps.id, input.stepId))
             .limit(1);
 
-        if (step.length > 0 && step[0]?.imageCustomId) {
-            await deleteImage(step[0].imageCustomId);
+        if (step.length > 0 && step[0]?.imageUrl) {
+            try {
+                // Extract file key from UploadThing URL
+                const url = new URL(step[0].imageUrl);
+                const fileKey = url.pathname.split('/').pop();
+                if (fileKey) {
+                    await utapi.deleteFiles([fileKey]);
+                }
+            } catch (error) {
+                console.error("Failed to delete image from UploadThing:", error);
+                // Continue with database deletion even if file deletion fails
+            }
         }
 
         // Delete the step
@@ -258,14 +196,10 @@ export const instructionsRouter = createTRPCRouter({
     }),
 
     // Upload image for a step
-    uploadStepImage: authenticatedProcedure.input(z.object({
+    uploadStepImage: adminProcedure.input(z.object({
         stepId: z.string(),
-        imageData: z.string(), // base64 data
+        imageUrl: z.string(), // UploadThing URL
     })).mutation(async ({ ctx, input }) => {
-        if (!input.imageData.startsWith('data:image/')) {
-            throw new Error("Invalid image data format");
-        }
-
         // Get step info
         const step = await ctx.db
             .select()
@@ -283,20 +217,29 @@ export const instructionsRouter = createTRPCRouter({
         }
 
         // Delete existing image if any
-        if (stepData.imageCustomId) {
-            await deleteImage(stepData.imageCustomId);
+        if (stepData.imageUrl) {
+            try {
+                // Extract file key from UploadThing URL
+                const url = new URL(stepData.imageUrl);
+                const fileKey = url.pathname.split('/').pop();
+                if (fileKey) {
+                    await utapi.deleteFiles([fileKey]);
+                }
+            } catch (error) {
+                console.error("Failed to delete existing image from UploadThing:", error);
+                // Continue with update even if deletion fails
+            }
         }
 
-        // Generate custom ID and save image
+        // Generate custom ID for tracking
         const customId = `step_${input.stepId}_${Date.now()}`;
-        const result = await saveImage(input.imageData, customId);
 
         // Update step with new image
         const updatedStep = await ctx.db
             .update(clusterInstructionSteps)
             .set({
-                imageUrl: result.imageUrl,
-                imageCustomId: result.customId,
+                imageUrl: input.imageUrl,
+                imageCustomId: customId,
                 updatedAt: new Date(),
             })
             .where(eq(clusterInstructionSteps.id, input.stepId))
@@ -306,7 +249,7 @@ export const instructionsRouter = createTRPCRouter({
     }),
 
     // Remove image from a step
-    removeStepImage: authenticatedProcedure.input(z.object({
+    removeStepImage: adminProcedure.input(z.object({
         stepId: z.string(),
     })).mutation(async ({ ctx, input }) => {
         // Get step info
@@ -325,9 +268,19 @@ export const instructionsRouter = createTRPCRouter({
             throw new Error("Invalid step data");
         }
 
-        // Delete image file if exists
-        if (stepData.imageCustomId) {
-            await deleteImage(stepData.imageCustomId);
+        // Delete image file from UploadThing if exists
+        if (stepData.imageUrl) {
+            try {
+                // Extract file key from UploadThing URL
+                const url = new URL(stepData.imageUrl);
+                const fileKey = url.pathname.split('/').pop();
+                if (fileKey) {
+                    await utapi.deleteFiles([fileKey]);
+                }
+            } catch (error) {
+                console.error("Failed to delete image from UploadThing:", error);
+                // Continue with database update even if file deletion fails
+            }
         }
 
         // Update step to remove image
@@ -345,7 +298,7 @@ export const instructionsRouter = createTRPCRouter({
     }),
 
     // Delete instructions for a cluster
-    delete: authenticatedProcedure.input(z.object({
+    delete: adminProcedure.input(z.object({
         clusterId: z.string(),
     })).mutation(async ({ ctx, input }) => {
         // Get instruction ID
@@ -370,12 +323,32 @@ export const instructionsRouter = createTRPCRouter({
             .from(clusterInstructionSteps)
             .where(eq(clusterInstructionSteps.clusterInstructionsId, instructionData.id));
 
-        // Delete existing images
-        await Promise.all(
-            existingSteps
-                .filter(step => step.imageCustomId)
-                .map(step => deleteImage(step.imageCustomId!))
-        );
+        // Delete existing images from UploadThing
+        const imageUrls = existingSteps
+            .filter(step => step.imageUrl)
+            .map(step => step.imageUrl!);
+
+        if (imageUrls.length > 0) {
+            try {
+                const fileKeys = imageUrls
+                    .map(url => {
+                        try {
+                            const urlObj = new URL(url);
+                            return urlObj.pathname.split('/').pop();
+                        } catch {
+                            return null;
+                        }
+                    })
+                    .filter((key): key is string => key !== null);
+
+                if (fileKeys.length > 0) {
+                    await utapi.deleteFiles(fileKeys);
+                }
+            } catch (error) {
+                console.error("Failed to delete images from UploadThing:", error);
+                // Continue with database deletion even if file deletion fails
+            }
+        }
 
         // Delete steps first (cascade should handle this, but being explicit)
         await ctx.db
@@ -390,13 +363,6 @@ export const instructionsRouter = createTRPCRouter({
         return { success: true };
     }),
 
-    // Delete individual image by custom ID
-    deleteImage: authenticatedProcedure.input(z.object({
-        customId: z.string(),
-    })).mutation(async ({ input }) => {
-        await deleteImage(input.customId);
-        return { success: true };
-    }),
 
     // Get all instructions (for admin purposes)
     listAll: authenticatedProcedure.query(async ({ ctx }) => {

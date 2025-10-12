@@ -5,6 +5,8 @@ import { clustersRouter } from "./routers/clusters";
 import { gravesRouter } from "./routers/graves";
 import { searchRouter } from "./routers/search";
 import { instructionsRouter } from "./routers/instructions";
+import { publicRouter } from "./routers/public";
+import { graveRelationsRouter } from "./routers/graveRelations";
 
 /**
  * This is the primary router for your server.
@@ -18,6 +20,8 @@ export const appRouter = createTRPCRouter({
   graves: gravesRouter,
   search: searchRouter,
   instructions: instructionsRouter,
+  public: publicRouter,
+  graveRelations: graveRelationsRouter,
 });
 
 // export type definition of API

@@ -1,5 +1,5 @@
 import { graveCluster, request, user } from "@/server/db/schema";
-import { authenticatedProcedure, createTRPCRouter } from "../trpc";
+import { adminProcedure, authenticatedProcedure, createTRPCRouter } from "../trpc";
 import { z } from "zod";
 import { eq } from "drizzle-orm";
 
@@ -14,7 +14,7 @@ export const clustersRouter = createTRPCRouter({
 
         return rows;
     }),
-    create: authenticatedProcedure.input(z.object({
+    create: adminProcedure.input(z.object({
         name: z.string(),
         clusterNumber: z.number(),
         coordinates: z.object({
@@ -35,7 +35,7 @@ export const clustersRouter = createTRPCRouter({
         }).returning();
         return row;
     }),
-    delete: authenticatedProcedure.input(z.object({
+    delete: adminProcedure.input(z.object({
         id: z.string(),
     })).mutation(async ({ ctx, input }) => {
         await ctx.db.delete(graveCluster).where(eq(graveCluster.id, input.id));

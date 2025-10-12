@@ -4,7 +4,8 @@
 import dynamic from "next/dynamic";
 const Map = dynamic(() => import("@/components/Map"), { ssr: false });
 import { GraveModal } from "@/components/GraveModal";
-import { useEffect, useState, useMemo } from "react";
+import { GraveEditModal } from "@/components/GraveEditModal";
+import { useEffect, useState, useMemo, useRef } from "react";
 import { api } from "@/trpc/react";
 import { useDebounce } from "@/hooks/use-debounce";
 import { HighlightText } from "@/lib/search-highlight";
@@ -15,15 +16,19 @@ import { Input } from "@/components/ui/input";
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Drawer, DrawerContent, DrawerHeader, DrawerTitle, DrawerDescription } from "@/components/ui/drawer";
-import { Trash2, Search, ChevronLeft, ChevronRight, Check, ChevronsUpDown, Eye, BookOpen, Plus, X, Upload } from "lucide-react";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Trash2, Search, ChevronLeft, ChevronRight, Check, ChevronsUpDown, Eye, BookOpen, Plus, X, Upload, Edit } from "lucide-react";
 import { toast } from "sonner";
-import { unstable_ViewTransition as ViewTransition } from "react";
 import { ButtonGroup } from "@/components/ui/button-group";
+import { Skeleton } from "@/components/ui/skeleton";
+import { useUploadThing } from "@/lib/uploadthing";
+import { ViewTransition } from "react";
 
 type Grave = {
     id: string;
     graveClusterId: string;
     graveJson: unknown;
+    graveExpirationDate: Date | null;
     createdAt: Date;
     updatedAt: Date;
 };
@@ -131,6 +136,56 @@ export default function GravesPage() {
     }, [])
 
     const utils = api.useUtils();
+    const graveImageInputRef = useRef<HTMLInputElement | null>(null);
+    const [uploadModalOpen, setUploadModalOpen] = useState(false);
+    const [selectedUploadFiles, setSelectedUploadFiles] = useState<File[]>([]);
+    const [isUploading, setIsUploading] = useState(false);
+    const [uploadProgressIndex, setUploadProgressIndex] = useState<number>(0);
+
+    // UploadThing hooks
+    const { startUpload: startGraveImageUpload, isUploading: isGraveImageUploading } = useUploadThing("graveImageUploader", {
+        onClientUploadComplete: (res) => {
+            console.log("Grave image UploadThing response:", res);
+            if (res && selectedGrave?.id) {
+                // Upload all images to the grave
+                res.forEach((file) => {
+                    uploadGraveImage.mutate({
+                        graveId: selectedGrave.id,
+                        imageUrl: file.url, // Use 'url' instead of 'fileUrl'
+                    });
+                });
+                toast.success("Images uploaded successfully");
+                setUploadModalOpen(false);
+                setSelectedUploadFiles([]);
+                setUploadProgressIndex(0);
+                setIsUploading(false); // Reset uploading state
+            }
+        },
+        onUploadError: (error) => {
+            toast.error(`Upload failed: ${error.message}`);
+            setIsUploading(false);
+        },
+    });
+
+    const { startUpload: startInstructionImageUpload, isUploading: isInstructionImageUploading } = useUploadThing("instructionImageUploader", {
+        onClientUploadComplete: (res) => {
+            console.log("UploadThing response:", res);
+            if (res?.[0]) {
+                const file = res[0];
+                // Find the instruction step that was being uploaded to
+                const stepId = (window as any).currentUploadingStepId;
+                if (stepId) {
+                    uploadStepImage.mutate({
+                        stepId: stepId as string,
+                        imageUrl: file.url, // Use 'url' instead of 'fileUrl'
+                    });
+                }
+            }
+        },
+        onUploadError: (error) => {
+            toast.error(`Upload failed: ${error.message}`);
+        },
+    });
 
     // Instructions tRPC mutations
     const addStep = api.instructions.addStep.useMutation({
@@ -203,15 +258,7 @@ export default function GravesPage() {
         },
     });
 
-    const deleteInstructions = api.instructions.delete.useMutation({
-        onSuccess: () => {
-            toast.success("Instructions deleted successfully!");
-            setInstructions([]);
-        },
-        onError: (error) => {
-            toast.error(`Failed to delete instructions: ${error?.message ?? "Unknown error"}`);
-        },
-    });
+    // Note: deleteInstructions mutation was unused; removed to avoid linter warnings.
 
     const testSchema = api.instructions.testSchema.useQuery();
 
@@ -225,6 +272,30 @@ export default function GravesPage() {
         },
     });
 
+    // Grave images
+    const imagesQuery = api.graves.listImages.useQuery(
+        { graveId: selectedGrave?.id ?? "" },
+        { enabled: !!selectedGrave?.id }
+    );
+    const uploadGraveImage = api.graves.uploadImage.useMutation({
+        onSuccess: async () => {
+            await imagesQuery.refetch();
+            toast.success("Grave image uploaded");
+        },
+        onError: (error) => {
+            toast.error(`Failed to upload grave image: ${error?.message ?? "Unknown error"}`);
+        },
+    });
+    const deleteGraveImageMut = api.graves.deleteImage.useMutation({
+        onSuccess: async () => {
+            await imagesQuery.refetch();
+            toast.success("Grave image deleted");
+        },
+        onError: (error) => {
+            toast.error(`Failed to delete grave image: ${error?.message ?? "Unknown error"}`);
+        },
+    });
+
     const handleDeleteGrave = (graveId: string) => {
         deleteGrave.mutate({ id: graveId });
     };
@@ -234,6 +305,12 @@ export default function GravesPage() {
         // The grave count will be updated automatically when the query refetches
         setSelectedClusterForAdd(""); // Reset selection after adding
         await utils.graves.listAll.invalidate();
+    };
+
+    const handleGraveUpdated = async () => {
+        // Refresh all grave-related queries
+        await utils.graves.listAll.invalidate();
+        await utils.search.graves.invalidate();
     };
 
     const handleOpenDrawer = (grave: Grave) => {
@@ -249,7 +326,14 @@ export default function GravesPage() {
         try {
             const existingInstructions = await utils.instructions.getByCluster.fetch({ clusterId: cluster.id });
             if (existingInstructions?.steps) {
-                const formattedSteps = existingInstructions.steps.map(step => {
+                const formattedSteps: Array<{
+                    id: string,
+                    step: number,
+                    title: string,
+                    description: string,
+                    imageUrl?: string,
+                    imageCustomId?: string
+                }> = existingInstructions.steps.map(step => {
                     const [title, ...descriptionParts] = step.instruction.split('\n\n');
                     return {
                         id: step.id,
@@ -313,21 +397,31 @@ export default function GravesPage() {
         deleteStep.mutate({ stepId: id });
     };
 
-    const handleImageUpload = (id: string, file: File) => {
+    const handleImageUpload = async (id: string, file: File) => {
         console.log('Uploading image for step:', id, 'File:', file.name, 'Size:', file.size);
-        const reader = new FileReader();
-        reader.onload = (e) => {
-            const base64Data = e.target?.result as string;
-            console.log('Base64 data length:', base64Data?.length);
-            console.log('Base64 starts with:', base64Data?.substring(0, 50));
 
-            // Upload image directly to server
-            uploadStepImage.mutate({
-                stepId: id,
-                imageData: base64Data
-            });
-        };
-        reader.readAsDataURL(file);
+        // Store the step ID for the upload callback
+        (window as any).currentUploadingStepId = id;
+
+        try {
+            await startInstructionImageUpload([file]);
+        } catch (error) {
+            console.error("Upload failed:", error);
+            toast.error("Upload failed");
+        }
+    };
+
+    const handleGraveImageUpload = async (files: File[]) => {
+        if (!selectedGrave?.id || files.length === 0) return;
+
+        setIsUploading(true);
+        try {
+            await startGraveImageUpload(files);
+        } catch (error) {
+            console.error("Upload failed:", error);
+            toast.error("Upload failed");
+            setIsUploading(false);
+        }
     };
 
 
@@ -345,10 +439,10 @@ export default function GravesPage() {
     return (
         <div className="flex h-screen w-full gap-4 container">
             {/* Map - 50% left */}
-            <ViewTransition name="main-map">
-                <div className="sticky top-20 h-[80vh] w-1/2">
+            <div className="sticky top-20 h-[80vh] w-1/2">
+                <ViewTransition name="left-card-island">
                     <Map
-                        className="h-full w-full"
+                        className="h-full w-full max-w-7xl "
                         center={[13.235529662734809, 123.53030072913442]}
                         zoom={16}
                         maxZoom={19}
@@ -359,12 +453,12 @@ export default function GravesPage() {
                         enableAddClusters={false}
                         enableAddMarkers={false}
                     />
-                </div>
-            </ViewTransition>
+                </ViewTransition>
+            </div>
 
             {/* Graves List - 50% right */}
             <div className="w-1/2 p-4 space-y-4">
-                <ViewTransition name="main-card-right">
+                <ViewTransition name="right-card-island">
                     <Card>
                         <CardHeader>
                             <div className="flex items-center justify-between">
@@ -444,7 +538,40 @@ export default function GravesPage() {
 
                             {/* Graves List Grouped by Cluster */}
                             {isLoading ? (
-                                <p>Loading graves...</p>
+                                <div className="space-y-6">
+                                    {[...Array(3)].map((_, i) => (
+                                        <div key={i} className="border rounded-lg p-4">
+                                            <div className="flex items-center justify-between mb-3 pb-2 border-b">
+                                                <div>
+                                                    <Skeleton className="h-5 w-48 mb-2" />
+                                                    <Skeleton className="h-4 w-32" />
+                                                </div>
+                                                <div className="flex items-center gap-2">
+                                                    <Skeleton className="h-5 w-20" />
+                                                    <Skeleton className="h-8 w-28" />
+                                                </div>
+                                            </div>
+                                            <div className="space-y-2">
+                                                {[...Array(5)].map((_, j) => (
+                                                    <div key={j} className="p-3 border rounded-lg bg-gray-50">
+                                                        <div className="flex items-center justify-between">
+                                                            <div className="flex-1 space-y-2">
+                                                                <Skeleton className="h-4 w-56" />
+                                                                <Skeleton className="h-3 w-64" />
+                                                                <Skeleton className="h-3 w-40" />
+                                                            </div>
+                                                            <div className="flex items-center gap-2">
+                                                                <Skeleton className="h-5 w-20 rounded-full" />
+                                                                <Skeleton className="h-8 w-8" />
+                                                                <Skeleton className="h-8 w-8" />
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
                             ) : Array.isArray(paginatedGraves) && paginatedGraves.length > 0 ? (
                                 <div className="space-y-6">
                                     {Array.isArray(clusters) && clusters.map((cluster) => {
@@ -502,6 +629,11 @@ export default function GravesPage() {
                                                                             {" - "}
                                                                             {typeof graveData.deathDate === 'string' ? graveData.deathDate : ""}
                                                                         </div>
+                                                                        {grave.graveExpirationDate && (
+                                                                            <div className="text-xs text-orange-600 mt-1">
+                                                                                Expires: {new Date(grave.graveExpirationDate).toLocaleDateString()}
+                                                                            </div>
+                                                                        )}
                                                                         {typeof graveData.notes === 'string' && graveData.notes.trim() && (
                                                                             <div className="text-xs text-gray-400 mt-1">
                                                                                 <HighlightText
@@ -520,6 +652,19 @@ export default function GravesPage() {
                                                                                 highlightClassName="bg-yellow-100 font-semibold"
                                                                             />
                                                                         </Badge>
+                                                                        <GraveEditModal
+                                                                            graveId={grave.id}
+                                                                            onGraveUpdated={handleGraveUpdated}
+                                                                            trigger={
+                                                                                <Button
+                                                                                    variant="outline"
+                                                                                    size="sm"
+                                                                                    className="h-8 w-8 p-0"
+                                                                                >
+                                                                                    <Edit className="h-4 w-4" />
+                                                                                </Button>
+                                                                            }
+                                                                        />
                                                                         <Button
                                                                             variant="outline"
                                                                             size="sm"
@@ -648,6 +793,15 @@ export default function GravesPage() {
                                                 {clusters.find(c => c.id === selectedGrave.graveClusterId)?.name ?? 'N/A'}
                                             </p>
                                         </div>
+                                        <div>
+                                            <label className="text-sm font-medium text-gray-500">Expiration Date</label>
+                                            <p className="text-lg">
+                                                {selectedGrave.graveExpirationDate
+                                                    ? new Date(selectedGrave.graveExpirationDate).toLocaleDateString()
+                                                    : 'No expiration date set'
+                                                }
+                                            </p>
+                                        </div>
                                     </div>
 
                                     {(() => {
@@ -678,6 +832,19 @@ export default function GravesPage() {
                                                 >
                                                     Close
                                                 </Button>
+                                                <GraveEditModal
+                                                    graveId={selectedGrave.id}
+                                                    onGraveUpdated={() => {
+                                                        handleGraveUpdated();
+                                                        setDrawerOpen(false);
+                                                    }}
+                                                    trigger={
+                                                        <Button variant="outline">
+                                                            <Edit className="h-4 w-4 mr-2" />
+                                                            Edit Grave
+                                                        </Button>
+                                                    }
+                                                />
                                                 <Button
                                                     variant="destructive"
                                                     onClick={() => {
@@ -690,6 +857,57 @@ export default function GravesPage() {
                                                     Delete Grave
                                                 </Button>
                                             </div>
+                                        </div>
+                                    </div>
+
+                                    {/* Grave Images */}
+                                    <div className="pt-4 border-t">
+                                        <div className="flex items-center justify-between mb-3">
+                                            <div className="flex items-center gap-2">
+                                                <h4 className="font-semibold">Images</h4>
+                                                <span className="text-sm text-gray-500">{(imagesQuery.data?.length ?? 0)}/3</span>
+                                            </div>
+                                            <div>
+                                                <input
+                                                    ref={graveImageInputRef}
+                                                    type="file"
+                                                    accept="image/*"
+                                                    className="hidden"
+                                                    onChange={(e) => {
+                                                        const files = Array.from(e.target.files ?? []);
+                                                        if (files.length > 0) void handleGraveImageUpload(files);
+                                                    }}
+                                                />
+                                                <Button
+                                                    variant="outline"
+                                                    size="sm"
+                                                    onClick={() => setUploadModalOpen(true)}
+                                                    disabled={(imagesQuery.data?.length ?? 0) >= 3 || isUploading}
+                                                >
+                                                    <Upload className="h-4 w-4 mr-2" />
+                                                    Upload Image
+                                                </Button>
+                                            </div>
+                                        </div>
+                                        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                                            {(imagesQuery.data ?? []).map((img) => (
+                                                <div key={img.id} className="border rounded-md p-2 bg-white">
+                                                    <img src={img.imageUrl} alt={img.imageAlt ?? ''} className="w-full h-32 object-cover rounded" />
+                                                    <div className="flex justify-end mt-2">
+                                                        <Button
+                                                            variant="outline"
+                                                            size="sm"
+                                                            className="text-red-600"
+                                                            onClick={() => deleteGraveImageMut.mutate({ pictureId: img.id })}
+                                                        >
+                                                            <X className="h-4 w-4 mr-1" /> Remove
+                                                        </Button>
+                                                    </div>
+                                                </div>
+                                            ))}
+                                            {imagesQuery.isLoading && (
+                                                <div className="text-sm text-gray-500">Loading images...</div>
+                                            )}
                                         </div>
                                     </div>
                                 </div>
@@ -824,7 +1042,7 @@ export default function GravesPage() {
                                                                                 accept="image/*"
                                                                                 onChange={(e) => {
                                                                                     const file = e.target.files?.[0];
-                                                                                    if (file) handleImageUpload(instruction.id, file);
+                                                                                    if (file) void handleImageUpload(instruction.id, file);
                                                                                 }}
                                                                                 className="hidden"
                                                                                 id={`image-upload-${instruction.id}`}
@@ -867,6 +1085,58 @@ export default function GravesPage() {
                     </div>
                 </DrawerContent>
             </Drawer>
+
+            {/* Upload Images Modal */}
+            <Dialog open={uploadModalOpen} onOpenChange={(open) => { if (!open && !isUploading) { setUploadModalOpen(open); setSelectedUploadFiles([]); setUploadProgressIndex(0); } }}>
+                <DialogContent>
+                    <DialogHeader>
+                        <DialogTitle>Upload Images</DialogTitle>
+                        <DialogDescription>Select up to {(3 - (imagesQuery.data?.length ?? 0))} image(s) to upload.</DialogDescription>
+                    </DialogHeader>
+
+                    <div className="space-y-3">
+                        <input
+                            type="file"
+                            accept="image/*"
+                            multiple
+                            onChange={(e) => {
+                                const files = Array.from(e.target.files ?? []);
+                                const currentCount = imagesQuery.data?.length ?? 0;
+                                const remaining = Math.max(0, 3 - currentCount);
+                                setSelectedUploadFiles(files.slice(0, remaining));
+                            }}
+                        />
+                        {selectedUploadFiles.length > 0 && (
+                            <div className="text-sm text-gray-600">
+                                {selectedUploadFiles.length} file{selectedUploadFiles.length > 1 ? "s" : ""} selected
+                            </div>
+                        )}
+
+                        {isUploading && (
+                            <div className="text-sm text-gray-500">Uploading {uploadProgressIndex + 1} / {selectedUploadFiles.length}...</div>
+                        )}
+                    </div>
+
+                    <DialogFooter>
+                        <Button
+                            variant="outline"
+                            onClick={() => { if (!isUploading) { setUploadModalOpen(false); setSelectedUploadFiles([]); setUploadProgressIndex(0); } }}
+                            disabled={isUploading}
+                        >
+                            Cancel
+                        </Button>
+                        <Button
+                            onClick={async () => {
+                                if (!selectedGrave?.id || selectedUploadFiles.length === 0) return;
+                                await handleGraveImageUpload(selectedUploadFiles);
+                            }}
+                            disabled={selectedUploadFiles.length === 0 || isUploading || isGraveImageUploading}
+                        >
+                            {isUploading || isGraveImageUploading ? "Uploading..." : "Upload"}
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
         </div>
     )
 }

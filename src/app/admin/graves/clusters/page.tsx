@@ -8,8 +8,8 @@ import { useEffect, useState } from "react";
 import { api } from "@/trpc/react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { unstable_ViewTransition as ViewTransition } from "react";
 import { Navigation } from "lucide-react";
+import { ViewTransition } from "react";
 
 export default function ClustersPage() {
   const [polygon, setPolygon] = useState<[number, number][]>([]);
@@ -78,13 +78,14 @@ export default function ClustersPage() {
   return (
     <div className="flex h-screen w-full gap-4">
       {/* Map - 50% left */}
-      <ViewTransition name="main-map">
-        <div className="sticky top-20 h-[80vh] w-1/2 container rounded-md">
+      <div className="sticky top-20 h-[80vh] w-1/2 container rounded-md">
+        <ViewTransition name="left-card-island">
           <Map
-            className="h-full w-full"
+            className="h-full w-full max-w-7xl"
             center={[13.235529662734809, 123.53030072913442]}
             zoom={16}
             maxZoom={19}
+            enableAddMarkers={false}
             enableAddPolyline={false}
             polygon={polygon}
             polygonColor="#22c55e"
@@ -93,10 +94,12 @@ export default function ClustersPage() {
             onMapClickAction={handleMapClick}
             clearTempMarker={clearTempMarker}
           />
-        </div>
-      </ViewTransition>
+        </ViewTransition>
+
+      </div>
 
       {/* Controls - 50% right */}
+
       <div className="w-1/2 space-y-4 p-4">
         <div className="flex gap-2">
           <Button
@@ -128,7 +131,8 @@ export default function ClustersPage() {
           </div>
         </div>
 
-        <ViewTransition name="main-card-right">
+        <ViewTransition name="right-card-island">
+
           <Card className="flex flex-col">
             <CardHeader>
               <CardTitle>Existing Clusters ({clusters.length})</CardTitle>
@@ -198,6 +202,7 @@ export default function ClustersPage() {
           </Card>
         </ViewTransition>
       </div>
+
     </div>
   );
 }

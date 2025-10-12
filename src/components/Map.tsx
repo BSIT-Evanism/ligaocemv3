@@ -8,10 +8,12 @@ import {
   useMapEvents,
   Polyline,
   Polygon,
+  Circle,
+  CircleMarker,
   useMap,
   LayersControl,
 } from "react-leaflet";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useRef } from "react";
 import { Icon, type LeafletMouseEvent, LatLngBounds } from "leaflet";
 import "leaflet/dist/leaflet.css";
 import markerIcon2x from "leaflet/dist/images/marker-icon-2x.png";
@@ -19,6 +21,10 @@ import markerIcon from "leaflet/dist/images/marker-icon.png";
 import markerShadow from "leaflet/dist/images/marker-shadow.png";
 import { useMapStore } from "@/lib/store";
 import { ClusterMarker } from "./ClusterMarker";
+import LocateControl from "./LocateControl";
+
+
+
 
 type LatLngTuple = [number, number];
 
@@ -61,6 +67,9 @@ type MapProps = {
     longitude: number;
   }) => void;
   clearTempMarker?: boolean;
+  // Locate control options
+  enableLocateControl?: boolean;
+  locateControlPosition?: "topleft" | "topright" | "bottomleft" | "bottomright";
 };
 
 // Configure default marker icons using bundled assets to avoid broken images
@@ -147,6 +156,8 @@ export default function Map({
   onClusterClickAction,
   onMapClickAction,
   clearTempMarker = false,
+  enableLocateControl = true,
+  locateControlPosition = "topleft",
 }: MapProps) {
   const { markers: storeMarkers, addMarker } = useMapStore();
   const [tempClusterMarker, setTempClusterMarker] =
@@ -257,6 +268,8 @@ export default function Map({
       zoomSnap={0.25}
       className={`${className ?? "h-[400px] w-full rounded-md"} leaflet-map-container rounded-md`}
     >
+      {/* Subscribe to flyToTarget changes and animate the map to the target when set */}
+      <FlyToTargetListener />
       {enableLayerControls ? (
         <LayersControl position="topright">
           <LayersControl.BaseLayer checked name="Satellite">
@@ -292,7 +305,7 @@ export default function Map({
       )}
       <ClickToAddMarkers
         onAdd={handleAdd}
-        enabled={enableAddMarkers && !enableAddClusters}
+        enabled={enableAddMarkers && !enableAddClusters && !enableAddPolyline}
       />
       <ClickToAddPolyline
         onAdd={handleAddPolyline}
@@ -345,6 +358,132 @@ export default function Map({
           pathOptions={{ color: polygonColor, weight: 2, fillOpacity: 0.2 }}
         />
       )}
+      <UserLocationLayer cemeteryCenter={center} />
+      {enableLocateControl && (
+        <LocateControl position={locateControlPosition} />
+      )}
     </MapContainer>
+  );
+}
+
+function FlyToTargetListener() {
+  const map = useMap();
+  const { flyToTarget, setFlyToTarget } = useMapStore();
+  useEffect(() => {
+    if (!flyToTarget) return;
+    map.flyTo(flyToTarget, Math.max(map.getZoom(), 16));
+    // clear after moving so subsequent clicks work
+    setFlyToTarget(null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [flyToTarget, map]);
+  return null;
+}
+
+function UserLocationLayer({ cemeteryCenter }: { cemeteryCenter?: [number, number] }) {
+  const map = useMap();
+  const { userLocation, followUser } = useMapStore();
+  const [isAnimating, setIsAnimating] = useState(false);
+  const lastUpdateRef = useRef<number>(0);
+  const timeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+  useEffect(() => {
+    if (!userLocation || !followUser) return;
+
+    // Debounce rapid updates - only update if enough time has passed
+    const now = Date.now();
+    const timeSinceLastUpdate = now - lastUpdateRef.current;
+
+    if (timeSinceLastUpdate < 2000) { // 2 seconds debounce
+      return;
+    }
+
+    if (isAnimating) return;
+
+    // Clear any existing timeout
+    if (timeoutRef.current) {
+      clearTimeout(timeoutRef.current);
+    }
+
+    // Use provided cemetery center or fallback to a default
+    const center = cemeteryCenter || [13.235529662734809, 123.53030072913442];
+    const userPosition: [number, number] = [userLocation.lat, userLocation.lng];
+
+    // Calculate distance between user and cemetery center
+    const latDiff = Math.abs(userPosition[0] - center[0]);
+    const lngDiff = Math.abs(userPosition[1] - center[1]);
+    const distance = Math.sqrt(latDiff * latDiff + lngDiff * lngDiff);
+
+    // Set animating flag to prevent rapid successive calls
+    setIsAnimating(true);
+    lastUpdateRef.current = now;
+
+    // Use setTimeout to sequence the operation and prevent flickering
+    timeoutRef.current = setTimeout(() => {
+      try {
+        // If user is very close to cemetery center, just focus on user with higher zoom
+        if (distance < 0.001) { // ~100 meters
+          map.setView(userPosition, Math.max(map.getZoom(), 18), { animate: true });
+        } else {
+          // Create bounds that include both the user location and cemetery center
+          const bounds = new LatLngBounds(userPosition, center);
+
+          // Fit the map to show both locations with some padding
+          map.fitBounds(bounds, {
+            padding: [20, 20],
+            animate: true,
+            duration: 1.0
+          });
+        }
+      } catch (error) {
+        console.warn('Error during map animation:', error);
+      } finally {
+        // Reset animating flag after a delay to allow for smooth transitions
+        setTimeout(() => setIsAnimating(false), 2000);
+      }
+    }, 300); // Increased delay to prevent rapid successive calls
+
+    return () => {
+      if (timeoutRef.current) {
+        clearTimeout(timeoutRef.current);
+      }
+    };
+  }, [userLocation, followUser, map, cemeteryCenter, isAnimating]);
+
+  // Cleanup effect
+  useEffect(() => {
+    return () => {
+      if (timeoutRef.current) {
+        clearTimeout(timeoutRef.current);
+      }
+    };
+  }, []);
+
+  if (!userLocation) return null;
+  const position: [number, number] = [userLocation.lat, userLocation.lng];
+  const accuracy = userLocation.accuracy ?? 0;
+  const heading = userLocation.heading ?? null;
+  return (
+    <>
+      {/* Dot for precise position (pixel radius, no icon dependency) */}
+      <CircleMarker center={position} radius={6} pathOptions={{ color: "#2563eb", fillColor: "#3b82f6", fillOpacity: 0.9 }} />
+      {/* Accuracy circle */}
+      {accuracy > 0 && (
+        <Circle
+          center={position}
+          radius={accuracy}
+          pathOptions={{ color: "#3b82f6", opacity: 0.3, fillOpacity: 0.1 }}
+        />
+      )}
+      {/* Heading cone (approximate) */}
+      {heading !== null && (
+        <Polyline
+          positions={[position, [
+            position[0] + 0.0008 * Math.cos((heading * Math.PI) / 180),
+            position[1] + 0.0008 * Math.sin((heading * Math.PI) / 180),
+          ]]}
+          pathOptions={{ color: "#ef4444", weight: 2 }}
+        />
+      )}
+    </>
   );
 }

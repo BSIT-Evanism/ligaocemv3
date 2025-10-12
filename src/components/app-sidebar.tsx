@@ -25,24 +25,43 @@ import {
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Separator } from "@/components/ui/separator"
 import { usePathname } from "next/navigation"
 import Link from "next/link"
 import { LinkLoader } from "./link-loader"
 import { useSession } from "@/lib/auth-client"
 import AccountManagementModal from "./account-management-modal"
 import LogoutButton from "./logout-button"
+import { api } from "@/trpc/react"
 import {
   User,
   Settings,
   Search,
   Bell,
-  HelpCircle
+  HelpCircle,
+  MessageSquare,
+  Map,
+  AlertTriangle,
+  Calendar,
+  Clock
 } from "lucide-react"
 
 // This is sample data.
 const data = {
   versions: ["1.0.1", "1.1.0-alpha", "2.0.0-beta1"],
   navMain: [
+    {
+      title: "Admin Dashboard",
+      url: "/admin",
+      items: [
+        {
+          title: "Dashboard",
+          url: "/admin",
+        },
+      ],
+    },
     {
       title: "Users Module",
       url: "/admin",
@@ -69,9 +88,155 @@ const data = {
           title: "Manage Clusters",
           url: "/admin/graves/clusters",
         },
+        {
+          title: "Grave-User Relations",
+          url: "/admin/grave-relations",
+        },
       ],
     }
   ],
+  userNav: [
+    {
+      title: "My Dashboard",
+      url: "/dashboard",
+      items: [
+        {
+          title: "My Requests",
+          url: "/dashboard/requests",
+        },
+      ],
+    },
+    {
+      title: "Public",
+      url: "/map",
+      items: [
+        {
+          title: "Map View",
+          url: "/map",
+        },
+      ],
+    }
+  ],
+}
+
+// Notifications component
+function NotificationsPopover() {
+  const { data: expirationAlerts, isLoading } = api.graves.getExpirationAlerts.useQuery()
+
+  const totalAlerts = (expirationAlerts?.totalNearExpiration ?? 0) + (expirationAlerts?.totalExpired ?? 0)
+
+  return (
+    <Popover>
+      <PopoverTrigger asChild>
+        <Button variant="ghost" size="sm" className="relative">
+          <Bell className="h-4 w-4" />
+          {totalAlerts > 0 && (
+            <Badge
+              variant="destructive"
+              className="absolute -top-1 -right-1 h-5 w-5 flex items-center justify-center p-0 text-xs"
+            >
+              {totalAlerts}
+            </Badge>
+          )}
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent className="w-80 p-0" align="end">
+        <Card className="border-0 shadow-none">
+          <CardHeader className="pb-3">
+            <CardTitle className="text-sm font-medium flex items-center gap-2">
+              <Bell className="h-4 w-4" />
+              Notifications
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="p-0">
+            {isLoading ? (
+              <div className="p-4 text-center text-sm text-muted-foreground">
+                Loading notifications...
+              </div>
+            ) : totalAlerts === 0 ? (
+              <div className="p-4 text-center text-sm text-muted-foreground">
+                No notifications
+              </div>
+            ) : (
+              <div className="space-y-0">
+                {expirationAlerts?.totalExpired > 0 && (
+                  <div className="p-3 border-b">
+                    <div className="flex items-center gap-2 mb-2">
+                      <Badge variant="destructive" className="flex items-center gap-1 text-xs">
+                        <Calendar className="h-3 w-3" />
+                        {expirationAlerts.totalExpired} Expired
+                      </Badge>
+                    </div>
+                    <div className="space-y-1">
+                      {expirationAlerts.expired.slice(0, 2).map((grave) => {
+                        const graveData = grave.graveJson as Record<string, unknown>
+                        return (
+                          <div key={grave.id} className="text-xs text-red-600 bg-red-50 p-2 rounded">
+                            <div className="font-medium truncate">{graveData.deceasedName as string}</div>
+                            <div className="text-red-500 truncate">
+                              {grave.clusterName} - Plot {graveData.plotNumber as string}
+                            </div>
+                          </div>
+                        )
+                      })}
+                      {expirationAlerts.expired.length > 2 && (
+                        <div className="text-xs text-red-500 text-center">
+                          +{expirationAlerts.expired.length - 2} more expired
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {expirationAlerts?.totalNearExpiration > 0 && (
+                  <div className="p-3">
+                    <div className="flex items-center gap-2 mb-2">
+                      <Badge variant="outline" className="flex items-center gap-1 text-xs border-orange-300 text-orange-700">
+                        <Clock className="h-3 w-3" />
+                        {expirationAlerts.totalNearExpiration} Near Expiration
+                      </Badge>
+                    </div>
+                    <div className="space-y-1">
+                      {expirationAlerts.nearExpiration.slice(0, 2).map((grave) => {
+                        const graveData = grave.graveJson as Record<string, unknown>
+                        const expirationDate = grave.graveExpirationDate ? new Date(grave.graveExpirationDate) : null
+                        const daysUntilExpiration = expirationDate ? Math.ceil((expirationDate.getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24)) : 0
+                        return (
+                          <div key={grave.id} className="text-xs text-orange-600 bg-orange-50 p-2 rounded">
+                            <div className="font-medium truncate">{graveData.deceasedName as string}</div>
+                            <div className="text-orange-500 truncate">
+                              {grave.clusterName} - Plot {graveData.plotNumber as string}
+                            </div>
+                            <div className="text-orange-400">
+                              Expires in {daysUntilExpiration} day{daysUntilExpiration !== 1 ? 's' : ''}
+                            </div>
+                          </div>
+                        )
+                      })}
+                      {expirationAlerts.nearExpiration.length > 2 && (
+                        <div className="text-xs text-orange-500 text-center">
+                          +{expirationAlerts.nearExpiration.length - 2} more near expiration
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                <Separator />
+                <div className="p-3">
+                  <Button variant="outline" size="sm" className="w-full" asChild>
+                    <Link href="/admin/graves">
+                      View All Graves
+                    </Link>
+                  </Button>
+                </div>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      </PopoverContent>
+    </Popover>
+  )
 }
 
 export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
@@ -95,66 +260,72 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
         <div className="flex flex-col space-y-4">
           {/* User Profile Section */}
           <div className="flex items-center justify-between">
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button
-                  variant="ghost"
-                  className="flex items-center space-x-3 p-2 h-auto hover:bg-accent/50 w-full justify-start"
-                >
-                  <Avatar className="h-8 w-8">
-                    <AvatarImage src={userData?.user.image ?? ""} alt={userData?.user.name ?? ""} />
-                    <AvatarFallback className="text-xs font-medium">
-                      {userData?.user.name ? getUserInitials(userData.user.name) : "U"}
-                    </AvatarFallback>
-                  </Avatar>
-                  <div className="flex flex-col items-start min-w-0 flex-1">
-                    <span className="text-sm font-medium truncate max-w-[120px]">
-                      {userData?.user.name ?? "User"}
-                    </span>
-                    <span className="text-xs text-muted-foreground truncate max-w-[120px]">
-                      {userData?.user.email ?? ""}
-                    </span>
-                  </div>
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="start" className="w-56">
-                <DropdownMenuLabel className="font-normal">
-                  <div className="flex flex-col space-y-1">
-                    <p className="text-sm font-medium leading-none">{userData?.user.name ?? "User"}</p>
-                    <p className="text-xs leading-none text-muted-foreground">
-                      {userData?.user.email ?? ""}
-                    </p>
-                  </div>
-                </DropdownMenuLabel>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem asChild>
-                  <Link href="/dashboard" className="flex items-center">
-                    <User className="mr-2 h-4 w-4" />
-                    <span>Profile</span>
-                  </Link>
-                </DropdownMenuItem>
-                <DropdownMenuItem asChild>
-                  <AccountManagementModal user={userData?.user ?? { id: "", name: "", email: "" }} />
-                </DropdownMenuItem>
-                <DropdownMenuItem asChild>
-                  <Link href="/dashboard" className="flex items-center">
-                    <Settings className="mr-2 h-4 w-4" />
-                    <span>Settings</span>
-                  </Link>
-                </DropdownMenuItem>
-                <DropdownMenuItem asChild>
-                  <Link href="/dashboard" className="flex items-center">
-                    <HelpCircle className="mr-2 h-4 w-4" />
-                    <span>Help & Support</span>
-                  </Link>
-                </DropdownMenuItem>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem asChild>
-                  <LogoutButton />
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
+            <div className="flex items-center gap-2">
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    className="flex items-center space-x-3 p-2 h-auto hover:bg-accent/50 w-full justify-start"
+                  >
+                    <Avatar className="h-8 w-8">
+                      <AvatarImage src={userData?.user.image ?? ""} alt={userData?.user.name ?? ""} />
+                      <AvatarFallback className="text-xs font-medium">
+                        {userData?.user.name ? getUserInitials(userData.user.name) : "U"}
+                      </AvatarFallback>
+                    </Avatar>
+                    <div className="flex flex-col items-start min-w-0 flex-1">
+                      <span className="text-sm font-medium truncate max-w-[120px]">
+                        {userData?.user.name ?? "User"}
+                      </span>
+                      <span className="text-xs text-muted-foreground truncate max-w-[120px]">
+                        {userData?.user.email ?? ""}
+                      </span>
+                    </div>
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="start" className="w-56">
+                  <DropdownMenuLabel className="font-normal">
+                    <div className="flex flex-col space-y-1">
+                      <p className="text-sm font-medium leading-none">{userData?.user.name ?? "User"}</p>
+                      <p className="text-xs leading-none text-muted-foreground">
+                        {userData?.user.email ?? ""}
+                      </p>
+                    </div>
+                  </DropdownMenuLabel>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem asChild>
+                    <Link href="/dashboard" className="flex items-center">
+                      <User className="mr-2 h-4 w-4" />
+                      <span>Profile</span>
+                    </Link>
+                  </DropdownMenuItem>
+                  <DropdownMenuItem asChild>
+                    <AccountManagementModal user={userData?.user ?? { id: "", name: "", email: "" }} />
+                  </DropdownMenuItem>
+                  <DropdownMenuItem asChild>
+                    <Link href="/dashboard" className="flex items-center">
+                      <Settings className="mr-2 h-4 w-4" />
+                      <span>Settings</span>
+                    </Link>
+                  </DropdownMenuItem>
+                  <DropdownMenuItem asChild>
+                    <Link href="/dashboard" className="flex items-center">
+                      <HelpCircle className="mr-2 h-4 w-4" />
+                      <span>Help & Support</span>
+                    </Link>
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem asChild>
+                    <LogoutButton />
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </div>
 
+            {/* Notifications - Only show for admin users */}
+            {userData?.user?.role === "admin" && (
+              <NotificationsPopover />
+            )}
           </div>
 
           {/* Search Section */}
@@ -177,27 +348,54 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
         </div>
       </SidebarHeader>
       <SidebarContent>
-        {/* We create a SidebarGroup for each parent. */}
-        {data.navMain.map((item) => (
-          <SidebarGroup key={item.title}>
-            <SidebarGroupLabel>{item.title}</SidebarGroupLabel>
-            <SidebarGroupContent>
-              <SidebarMenu>
-                {item.items.map((item) => (
-                  <SidebarMenuItem key={item.title}>
-                    <SidebarMenuButton asChild isActive={item.url === path}>
-                      {/* @ts-expect-error - TODO: Fix this */}
-                      <Link href={item.url} className="flex gap-2">
-                        {item.title}
-                        <LinkLoader />
-                      </Link>
-                    </SidebarMenuButton>
-                  </SidebarMenuItem>
-                ))}
-              </SidebarMenu>
-            </SidebarGroupContent>
-          </SidebarGroup>
-        ))}
+        {/* Show different navigation based on user role */}
+        {userData?.user?.role === "admin" ? (
+          // Admin navigation
+          data.navMain.map((item) => (
+            <SidebarGroup key={item.title}>
+              <SidebarGroupLabel>{item.title}</SidebarGroupLabel>
+              <SidebarGroupContent>
+                <SidebarMenu>
+                  {item.items.map((item) => (
+                    <SidebarMenuItem key={item.title}>
+                      <SidebarMenuButton asChild isActive={item.url === path}>
+                        {/* @ts-expect-error - TODO: Fix this */}
+                        <Link href={item.url} className="flex gap-2">
+                          {item.title}
+                          <LinkLoader />
+                        </Link>
+                      </SidebarMenuButton>
+                    </SidebarMenuItem>
+                  ))}
+                </SidebarMenu>
+              </SidebarGroupContent>
+            </SidebarGroup>
+          ))
+        ) : (
+          // User navigation
+          data.userNav.map((item) => (
+            <SidebarGroup key={item.title}>
+              <SidebarGroupLabel>{item.title}</SidebarGroupLabel>
+              <SidebarGroupContent>
+                <SidebarMenu>
+                  {item.items.map((item) => (
+                    <SidebarMenuItem key={item.title}>
+                      <SidebarMenuButton asChild isActive={item.url === path}>
+                        {/* @ts-expect-error - TODO: Fix this */}
+                        <Link href={item.url} className="flex gap-2">
+                          {item.title === "My Requests" && <MessageSquare className="h-4 w-4" />}
+                          {item.title === "Map View" && <Map className="h-4 w-4" />}
+                          {item.title}
+                          <LinkLoader />
+                        </Link>
+                      </SidebarMenuButton>
+                    </SidebarMenuItem>
+                  ))}
+                </SidebarMenu>
+              </SidebarGroupContent>
+            </SidebarGroup>
+          ))
+        )}
       </SidebarContent>
       <SidebarRail />
     </Sidebar>

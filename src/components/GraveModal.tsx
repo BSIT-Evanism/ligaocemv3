@@ -25,6 +25,7 @@ export function GraveModal({ clusterId, clusterName, onGraveAdded }: GraveModalP
         graveType: "",
         plotNumber: "",
         notes: "",
+        graveExpirationDate: "",
     });
 
     const utils = api.useUtils();
@@ -38,6 +39,7 @@ export function GraveModal({ clusterId, clusterName, onGraveAdded }: GraveModalP
                 graveType: "",
                 plotNumber: "",
                 notes: "",
+                graveExpirationDate: "",
             });
             setOpen(false);
             toast.success(`Grave added for ${formData.deceasedName} in ${clusterName}`);
@@ -65,6 +67,7 @@ export function GraveModal({ clusterId, clusterName, onGraveAdded }: GraveModalP
             graveType: formData.graveType,
             plotNumber: formData.plotNumber,
             notes: formData.notes || undefined,
+            graveExpirationDate: formData.graveExpirationDate || undefined,
         });
     };
 
@@ -158,6 +161,19 @@ export function GraveModal({ clusterId, clusterName, onGraveAdded }: GraveModalP
                             value={formData.notes}
                             onChange={(e) => handleInputChange("notes", e.target.value)}
                         />
+                    </div>
+
+                    <div className="space-y-2">
+                        <Label htmlFor="graveExpirationDate">Grave Expiration Date</Label>
+                        <Input
+                            id="graveExpirationDate"
+                            type="date"
+                            value={formData.graveExpirationDate}
+                            onChange={(e) => handleInputChange("graveExpirationDate", e.target.value)}
+                        />
+                        <p className="text-xs text-gray-500">
+                            Optional: Set when this grave plot expires or needs renewal
+                        </p>
                     </div>
 
                     <div className="flex justify-end gap-2 pt-4">

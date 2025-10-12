@@ -32,6 +32,19 @@ export const createTRPCContext = async (opts: { headers: Headers }) => {
   };
 };
 
+export type Context = Awaited<ReturnType<typeof createTRPCContext>> & {
+  user?: {
+    id: string;
+    name: string;
+    email: string;
+    role?: string | null;
+    image?: string | null;
+    emailVerified: boolean;
+    createdAt: Date;
+    updatedAt: Date;
+  };
+};
+
 /**
  * 2. INITIALIZATION
  *
@@ -39,7 +52,7 @@ export const createTRPCContext = async (opts: { headers: Headers }) => {
  * ZodErrors so that you get typesafety on the frontend if your procedure fails due to validation
  * errors on the backend.
  */
-const t = initTRPC.context<typeof createTRPCContext>().create({
+const t = initTRPC.context<Context>().create({
   transformer: superjson,
   errorFormatter({ shape, error }) {
     return {
@@ -106,11 +119,15 @@ const authMiddleware = t.middleware(async ({ next, ctx }) => {
     throw new TRPCError({ code: "UNAUTHORIZED" });
   }
 
-  return next({ ctx });
+  return next({
+    ctx: {
+      ...ctx,
+      user: session.user
+    }
+  });
 });
 
 const adminMiddleware = t.middleware(async ({ next, ctx }) => {
-
   const session = await auth.api.getSession({
     headers: ctx.headers,
   });
@@ -123,7 +140,12 @@ const adminMiddleware = t.middleware(async ({ next, ctx }) => {
     throw new TRPCError({ code: "UNAUTHORIZED" });
   }
 
-  return next({ ctx });
+  return next({
+    ctx: {
+      ...ctx,
+      user: session.user
+    }
+  });
 });
 
 /**

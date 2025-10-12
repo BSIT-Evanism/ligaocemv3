@@ -118,7 +118,7 @@ export default function AccountManagementModal({ user }: AccountManagementModalP
                     Manage Account
                 </Button>
             </DialogTrigger>
-            <DialogContent className="sm:max-w-[425px]">
+            <DialogContent className="sm:max-w-[725px] max-h-[90vh] overflow-y-auto">
                 <DialogHeader>
                     <DialogTitle>Account Management</DialogTitle>
                     <DialogDescription>

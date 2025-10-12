@@ -7,6 +7,7 @@ import { env } from "./src/env.js";
 
 /** @type {import("next").NextConfig} */
 const config = {
+    reactCompiler: true,
     typedRoutes: true,
     experimental: {
         viewTransition: true,
@@ -16,9 +17,6 @@ const config = {
         // Allow production builds to succeed even if there are TypeScript errors
         ignoreBuildErrors: true,
     },
-    eslint: {
-        ignoreDuringBuilds: true,
-    }
 };
 
 export default config;
