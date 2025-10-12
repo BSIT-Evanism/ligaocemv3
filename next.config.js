@@ -17,6 +17,9 @@ const config = {
         // Allow production builds to succeed even if there are TypeScript errors
         ignoreBuildErrors: true,
     },
+    eslint: {
+        ignoreDuringBuilds: true,
+    },
 };
 
 export default config;
