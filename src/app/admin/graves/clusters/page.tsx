@@ -4,11 +4,13 @@ import dynamic from "next/dynamic";
 const Map = dynamic(() => import("@/components/Map"), { ssr: false });
 import { ClusterForm } from "@/components/ClusterForm";
 import { DeleteClusterDialog } from "@/components/DeleteClusterDialog";
+import { ClusterEditModal } from "@/components/ClusterEditModal";
 import { useEffect, useState } from "react";
 import { api } from "@/trpc/react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Navigation } from "lucide-react";
+import { ViewTransition } from "react";
 
 export default function ClustersPage() {
   const [polygon, setPolygon] = useState<[number, number][]>([]);
@@ -127,74 +129,89 @@ export default function ClustersPage() {
             />
           </div>
         </div>
+        <ViewTransition name="right-card-island">
 
-        <Card className="flex flex-col">
-          <CardHeader>
-            <CardTitle>Existing Clusters ({clusters.length})</CardTitle>
-          </CardHeader>
-          <CardContent className="flex flex-col">
-            {clustersLoading ? (
-              <p>Loading clusters...</p>
-            ) : clusters.length === 0 ? (
-              <p className="text-gray-500">
-                No clusters found. Click &quot;Add Cluster&quot; to create
-                one.
-              </p>
-            ) : (
-              <div className="space-y-2">
-                {clusters.map((cluster) => (
-                  <div
-                    key={cluster.id}
-                    className="group flex items-center justify-between rounded-lg border p-3 hover:bg-gray-50"
-                  >
+          <Card className="flex flex-col">
+            <CardHeader>
+              <CardTitle>Existing Clusters ({clusters.length})</CardTitle>
+            </CardHeader>
+            <CardContent className="flex flex-col">
+              {clustersLoading ? (
+                <p>Loading clusters...</p>
+              ) : clusters.length === 0 ? (
+                <p className="text-gray-500">
+                  No clusters found. Click &quot;Add Cluster&quot; to create
+                  one.
+                </p>
+              ) : (
+                <div className="space-y-2">
+                  {clusters.map((cluster) => (
                     <div
-                      className="flex-1 cursor-pointer"
-                      onClick={() => {
-                        // You could add functionality to center the map on this cluster
-                        console.log("Cluster clicked:", cluster);
-                      }}
+                      key={cluster.id}
+                      className="group flex items-center justify-between rounded-lg border p-3 hover:bg-gray-50"
                     >
-                      <div className="font-medium">{cluster.name}</div>
-                      <div className="text-sm text-gray-500">
-                        Cluster #{cluster.clusterNumber}
-                      </div>
-                      <div className="text-xs text-gray-400">
-                        {cluster.coordinates
-                          ? `${cluster.coordinates.latitude.toFixed(6)}, ${cluster.coordinates.longitude.toFixed(6)}`
-                          : "No coordinates"}
-                      </div>
-                    </div>
-                    <div className="flex gap-2 opacity-0 transition-opacity group-hover:opacity-100">
-                      {cluster.coordinates && (
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() =>
-                            handleNavigateToCluster(
-                              cluster.coordinates!.latitude,
-                              cluster.coordinates!.longitude,
-                            )
-                          }
-                          className="flex items-center gap-1"
-                        >
-                          <Navigation className="h-3 w-3" />
-                          Navigate
-                        </Button>
-                      )}
-                      <DeleteClusterDialog
-                        clusterId={cluster.id}
-                        clusterName={cluster.name}
-                        onDeleted={() => {
-                          console.log("Cluster deleted:", cluster.name);
+                      <div
+                        className="flex-1 cursor-pointer"
+                        onClick={() => {
+                          // You could add functionality to center the map on this cluster
+                          console.log("Cluster clicked:", cluster);
                         }}
-                      />
+                      >
+                        <div className="font-medium">{cluster.name}</div>
+                        <div className="text-sm text-gray-500">
+                          Cluster #{cluster.clusterNumber}
+                        </div>
+                        <div className="text-xs text-gray-400">
+                          {cluster.coordinates
+                            ? `${cluster.coordinates.latitude.toFixed(6)}, ${cluster.coordinates.longitude.toFixed(6)}`
+                            : "No coordinates"}
+                        </div>
+                      </div>
+                      <div className="flex gap-2 opacity-0 transition-opacity group-hover:opacity-100">
+                        {cluster.coordinates && (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() =>
+                              handleNavigateToCluster(
+                                cluster.coordinates!.latitude,
+                                cluster.coordinates!.longitude,
+                              )
+                            }
+                            className="flex items-center gap-1"
+                          >
+                            <Navigation className="h-3 w-3" />
+                            Navigate
+                          </Button>
+                        )}
+                        <ClusterEditModal
+                          clusterId={cluster.id}
+                          trigger={
+                            <Button size="sm" variant="outline" className="h-8 w-8 p-0">
+                              {/* Edit icon inside modal component default too; we keep compact button here */}
+                              <span className="sr-only">Edit cluster</span>
+                              ✎
+                            </Button>
+                          }
+                          onUpdated={() => {
+                            // no-op; list invalidated in modal
+                          }}
+                        />
+                        <DeleteClusterDialog
+                          clusterId={cluster.id}
+                          clusterName={cluster.name}
+                          onDeleted={() => {
+                            console.log("Cluster deleted:", cluster.name);
+                          }}
+                        />
+                      </div>
                     </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </CardContent>
-        </Card>
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </ViewTransition>
       </div>
 
     </div>
