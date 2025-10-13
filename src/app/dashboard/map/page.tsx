@@ -71,6 +71,11 @@ export default function PublicMapPage() {
     const [preferredContactTime, setPreferredContactTime] = useState("");
     const [additionalNotes, setAdditionalNotes] = useState("");
 
+    // Image preview state (basic fullscreen dialog)
+    const [imagePreviewSrc, setImagePreviewSrc] = useState<string | null>(null);
+    const openImagePreview = (src: string) => setImagePreviewSrc(src);
+    const closeImagePreview = () => setImagePreviewSrc(null);
+
     const { data: graves = [], isLoading: gravesLoading } = api.public.gravesByCluster.useQuery(
         { clusterId: openClusterId ?? "" },
         { enabled: !!openClusterId }
@@ -231,6 +236,18 @@ export default function PublicMapPage() {
         };
     }, [watchId, handleDeviceOrientation]);
 
+    // Close image preview on ESC
+    useEffect(() => {
+        if (!imagePreviewSrc) return;
+        const onKeyDown = (e: KeyboardEvent) => {
+            if (e.key === "Escape") {
+                closeImagePreview();
+            }
+        };
+        window.addEventListener("keydown", onKeyDown);
+        return () => window.removeEventListener("keydown", onKeyDown);
+    }, [imagePreviewSrc]);
+
     useEffect(() => {
         setPolygon([
             [13.2362395, 123.5303761],
@@ -295,7 +312,7 @@ export default function PublicMapPage() {
             {isMobile ? (
                 <div className="h-full w-full">
                     <Map
-                        className="h-[calc(100vh-250px)] w-full"
+                        className=" h-[calc(100vh-250px)] w-full"
                         center={center}
                         zoom={16}
                         maxZoom={19}
@@ -306,7 +323,7 @@ export default function PublicMapPage() {
                         onClusterClickAction={(c) => { setSelected(c); setOpenClusterId(c.id); }}
                     />
 
-                    <div className="pointer-events-none absolute right-3 top-3 z-[1000] flex gap-2">
+                    <div className="pointer-events-none flex gap-2">
                         <button
                             type="button"
                             onClick={requestAndGoToMyLocation}
@@ -399,11 +416,11 @@ export default function PublicMapPage() {
                                                     </SelectTrigger>
                                                     <SelectContent>
                                                         <SelectItem value="none">None</SelectItem>
-                                                        {myRelatedGraves.map((grave) => {
+                                                        {myRelatedGraves.map((grave, idx) => {
                                                             const data = grave.graveJson as Record<string, unknown>;
                                                             return (
-                                                                <SelectItem key={grave.id} value={grave.id}>
-                                                                    {readStringField(data, "deceasedName", "Unnamed")} - {readStringField(data, "plotNumber")} ({(grave.clusterName as string) ?? "Unknown Cluster"})
+                                                                <SelectItem key={grave.id ?? String(idx)} value={(grave.id ?? "")}>
+                                                                    {readStringField(data, "deceasedName", "Unnamed")} - {readStringField(data, "plotNumber")} ({grave.clusterName ?? "Unknown Cluster"})
                                                                 </SelectItem>
                                                             );
                                                         })}
@@ -558,7 +575,12 @@ export default function PublicMapPage() {
                                                         <div className="font-medium text-base">Step {s.step}</div>
                                                         <div className="text-muted-foreground text-sm whitespace-pre-line rounded-md border p-3 bg-muted/30">{s.instruction}</div>
                                                         {s.imageUrl && (
-                                                            <img src={s.imageUrl} alt={`Step ${s.step}`} className="mt-3 h-auto max-h-48 w-full rounded-md border object-contain" />
+                                                            <img
+                                                                src={s.imageUrl as string}
+                                                                alt={`Step ${s.step}`}
+                                                                className="mt-3 h-auto max-h-48 w-full rounded-md border object-contain cursor-zoom-in"
+                                                                onClick={() => openImagePreview(s.imageUrl as string)}
+                                                            />
                                                         )}
                                                     </li>
                                                 ))}
@@ -587,7 +609,7 @@ export default function PublicMapPage() {
                             onClusterClickAction={(c) => setSelected(c as Cluster)}
                         />
 
-                        <div className="pointer-events-none absolute right-3 top-3 z-[1000] flex gap-2">
+                        <div className="pointer-events-none flex gap-2">
                             <button
                                 type="button"
                                 onClick={requestAndGoToMyLocation}
@@ -680,11 +702,11 @@ export default function PublicMapPage() {
                                                         </SelectTrigger>
                                                         <SelectContent>
                                                             <SelectItem value="none">None</SelectItem>
-                                                            {myRelatedGraves.map((grave) => {
+                                                            {myRelatedGraves.map((grave, idx) => {
                                                                 const data = grave.graveJson as Record<string, unknown>;
                                                                 return (
-                                                                    <SelectItem key={grave.id} value={grave.id}>
-                                                                        {readStringField(data, "deceasedName", "Unnamed")} - {readStringField(data, "plotNumber")} ({(grave.clusterName as string) ?? "Unknown Cluster"})
+                                                                    <SelectItem key={grave.id ?? String(idx)} value={(grave.id ?? "")}>
+                                                                        {readStringField(data, "deceasedName", "Unnamed")} - {readStringField(data, "plotNumber")} ({grave.clusterName ?? "Unknown Cluster"})
                                                                     </SelectItem>
                                                                 );
                                                             })}
@@ -810,7 +832,12 @@ export default function PublicMapPage() {
                                                                                 <div className="font-medium text-base">Step {s.step}</div>
                                                                                 <div className="text-muted-foreground text-sm whitespace-pre-line rounded-md border p-2 bg-muted/30">{s.instruction}</div>
                                                                                 {s.imageUrl && (
-                                                                                    <img src={s.imageUrl} alt={`Step ${s.step}`} className="mt-2 h-auto max-h-48 w-full rounded border object-contain" />
+                                                                                    <img
+                                                                                        src={s.imageUrl as string}
+                                                                                        alt={`Step ${s.step}`}
+                                                                                        className="mt-2 h-auto max-h-48 w-full rounded border object-contain cursor-zoom-in"
+                                                                                        onClick={() => openImagePreview(s.imageUrl as string)}
+                                                                                    />
                                                                                 )}
                                                                             </li>
                                                                         ))}
@@ -939,7 +966,12 @@ export default function PublicMapPage() {
                                         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                                             {(graveImages ?? []).map((img) => (
                                                 <div key={img.id} className="border border-slate-200 rounded-xl p-3 bg-white hover:shadow-md transition-shadow duration-200">
-                                                    <img src={img.imageUrl} alt={img.imageAlt ?? ''} className="w-full h-40 object-cover rounded-lg" />
+                                                    <img
+                                                        src={img.imageUrl}
+                                                        alt={img.imageAlt ?? ''}
+                                                        className="w-full h-40 object-cover rounded-lg cursor-zoom-in"
+                                                        onClick={() => openImagePreview(img.imageUrl)}
+                                                    />
                                                 </div>
                                             ))}
                                             {graveImagesLoading && (
@@ -960,8 +992,33 @@ export default function PublicMapPage() {
                     </div>
                 </DialogContent>
             </Dialog>
+
+            {imagePreviewSrc && (
+                <div
+                    className="fixed inset-0 z-[2000] flex items-center justify-center bg-black/90"
+                    onClick={closeImagePreview}
+                    role="dialog"
+                    aria-modal="true"
+                >
+                    <button
+                        type="button"
+                        aria-label="Close image preview"
+                        className="absolute right-4 top-4 rounded bg-white/10 px-3 py-1.5 text-white backdrop-blur hover:bg-white/20"
+                        onClick={(e) => { e.stopPropagation(); closeImagePreview(); }}
+                    >
+                        Close
+                    </button>
+                    <img
+                        src={imagePreviewSrc as string}
+                        alt="Preview"
+                        className="max-h-[92vh] max-w-[92vw] object-contain"
+                        onClick={(e) => e.stopPropagation()}
+                    />
+                </div>
+            )}
         </div>
     );
 }
+
 
 

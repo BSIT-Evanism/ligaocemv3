@@ -27,14 +27,14 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                                 </LinkLoader>
                                 <ActiveLinkIndicator href="/dashboard/requests" />
                             </Link>
-                            <Link href="/dashboard/map" className="text-sm font-medium hover:underline ">
+                            <Link href="/map" className="text-sm font-medium hover:underline ">
                                 <LinkLoader fade>
                                     Map View
                                 </LinkLoader>
-                                <ActiveLinkIndicator href="/dashboard/map" />
+                                <ActiveLinkIndicator href="/map" />
                             </Link>
                         </div>
-                        <div className="flex items-center gap-3">
+                        {/* <div className="flex items-center gap-3">
                             <Link href="/map" className="text-sm hover:underline">
                                 Public Map
                             </Link>
@@ -43,7 +43,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                             }>
                                 <AuthSwitcher />
                             </Suspense>
-                        </div>
+                        </div> */}
                     </div>
                 </header>
                 <main className="container mx-auto px-4 py-4 md:py-6">
