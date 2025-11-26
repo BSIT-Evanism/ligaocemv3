@@ -1,57 +1,97 @@
 import { request, user, requestStatusTable, requestLogs, graveDetails, requestGraveRelation } from "@/server/db/schema";
 import { adminProcedure, authenticatedProcedure, createTRPCRouter } from "../trpc";
-import { eq, and, desc } from "drizzle-orm";
+import { eq, and, desc, count } from "drizzle-orm";
 import { z } from "zod";
 
 export const requestsRouter = createTRPCRouter({
-    // Admin: List all requests with user details and status
-    listAll: adminProcedure.query(async ({ ctx }) => {
-        const rows = await ctx.db
-            .select({
-                requestId: request.id,
-                userId: request.userId,
-                requestDetails: request.requestDetails,
-                requestRelatedGrave: request.requestRelatedGrave,
-                createdAt: request.createdAt,
-                updatedAt: request.updatedAt,
-                userName: user.name,
-                userEmail: user.email,
-                userRole: user.role,
-                status: requestStatusTable.status,
-                statusRemark: requestStatusTable.remark,
-                statusUpdatedAt: requestStatusTable.updatedAt,
-            })
-            .from(request)
-            .leftJoin(user, eq(request.userId, user.id))
-            .leftJoin(requestStatusTable, eq(request.id, requestStatusTable.requestId))
-            .orderBy(desc(request.createdAt));
+    // Admin: List all requests with user details and status (with pagination)
+    listAll: adminProcedure
+        .input(z.object({
+            page: z.number().min(1).default(1),
+            limit: z.number().min(1).max(100).default(10),
+        }).optional())
+        .query(async ({ ctx, input = {} }) => {
+            try {
+                console.log("listAll query called with input:", input);
+                // Use defaults if input is not provided
+                const page = input.page ?? 1;
+                const limit = input.limit ?? 10;
+                const offset = (page - 1) * limit;
 
-        // Parse the structured request data
-        return rows.map(row => ({
-            ...row,
-            requestData: (() => {
-                try {
-                    const parsed = JSON.parse(row.requestDetails);
-                    return {
-                        details: parsed.details || row.requestDetails,
-                        priority: parsed.priority || "medium",
-                        contactPhone: parsed.contactPhone,
-                        preferredContactTime: parsed.preferredContactTime,
-                        additionalNotes: parsed.additionalNotes,
-                    };
-                } catch {
-                    // Fallback for old format
-                    return {
-                        details: row.requestDetails,
-                        priority: "medium",
-                        contactPhone: null,
-                        preferredContactTime: null,
-                        additionalNotes: null,
-                    };
-                }
-            })()
-        }));
-    }),
+                // Get total count for pagination
+                const totalCountResult = await ctx.db
+                    .select({ count: count() })
+                    .from(request)
+                    .leftJoin(user, eq(request.userId, user.id))
+                    .leftJoin(requestStatusTable, eq(request.id, requestStatusTable.requestId));
+
+                const totalCount = totalCountResult[0]?.count ?? 0;
+
+                // Get paginated data
+                const rows = await ctx.db
+                    .select({
+                        requestId: request.id,
+                        userId: request.userId,
+                        requestDetails: request.requestDetails,
+                        requestRelatedGrave: request.requestRelatedGrave,
+                        createdAt: request.createdAt,
+                        updatedAt: request.updatedAt,
+                        userName: user.name,
+                        userEmail: user.email,
+                        userRole: user.role,
+                        status: requestStatusTable.status,
+                        statusRemark: requestStatusTable.remark,
+                        statusUpdatedAt: requestStatusTable.updatedAt,
+                    })
+                    .from(request)
+                    .leftJoin(user, eq(request.userId, user.id))
+                    .leftJoin(requestStatusTable, eq(request.id, requestStatusTable.requestId))
+                    .orderBy(desc(request.createdAt))
+                    .limit(limit)
+                    .offset(offset);
+
+                // Parse the structured request data
+                const data = rows.map(row => ({
+                    ...row,
+                    requestData: (() => {
+                        try {
+                            const parsed = JSON.parse(row.requestDetails);
+                            return {
+                                details: parsed.details || row.requestDetails,
+                                priority: parsed.priority || "medium",
+                                contactPhone: parsed.contactPhone,
+                                preferredContactTime: parsed.preferredContactTime,
+                                additionalNotes: parsed.additionalNotes,
+                            };
+                        } catch {
+                            // Fallback for old format
+                            return {
+                                details: row.requestDetails,
+                                priority: "medium",
+                                contactPhone: null,
+                                preferredContactTime: null,
+                                additionalNotes: null,
+                            };
+                        }
+                    })()
+                }));
+
+                return {
+                    data,
+                    pagination: {
+                        page: page,
+                        limit: limit,
+                        total: totalCount,
+                        totalPages: Math.ceil(totalCount / limit),
+                        hasNext: page < Math.ceil(totalCount / limit),
+                        hasPrev: page > 1,
+                    }
+                };
+            } catch (error) {
+                console.error("Error in listAll query:", error);
+                throw new Error("Failed to fetch requests");
+            }
+        }),
 
     // User: List their own requests
     listMyRequests: authenticatedProcedure.query(async ({ ctx }) => {
@@ -128,6 +168,9 @@ export const requestsRouter = createTRPCRouter({
             }
 
             const requestItem = requestData[0];
+            if (!requestItem) {
+                throw new Error("Request not found");
+            }
 
             // Check if user can access this request (own request or admin)
             if (requestItem.userId !== ctx.user.id && ctx.user.role !== "admin") {
@@ -149,7 +192,7 @@ export const requestsRouter = createTRPCRouter({
 
             // Get related grave details if exists
             let relatedGrave = null;
-            if (requestItem.requestRelatedGrave) {
+            if (requestItem?.requestRelatedGrave) {
                 const graveData = await ctx.db
                     .select()
                     .from(graveDetails)

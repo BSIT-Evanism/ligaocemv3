@@ -17,7 +17,8 @@ import Link from "next/link"
 export default function AdminDashboard() {
     const { data: clusters = [], isLoading: clustersLoading, error: clustersError } = api.clusters.listAll.useQuery()
     const { data: graves = [], isLoading: gravesLoading, error: gravesError } = api.graves.listAll.useQuery()
-    const { data: requests = [], isLoading: requestsLoading, error: requestsError } = api.requests.listAll.useQuery()
+    const { data: requestsData, isLoading: requestsLoading, error: requestsError } = api.requests.listAll.useQuery()
+    const requests = requestsData?.data ?? []
     const { data: expirationAlerts, isLoading: expirationLoading, error: expirationError } = api.graves.getExpirationAlerts.useQuery()
 
     const { total: usersTotal, isLoading: usersLoading, error: usersError } = useUsers({ limit: 1, offset: 0 })

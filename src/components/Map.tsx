@@ -320,15 +320,66 @@ export default function Map({
           icon={defaultIcon}
         >
           <Popup>
-            {pos[0].toFixed(6)}, {pos[1].toFixed(6)}
+            <div className="p-2 min-w-[200px]">
+              <div className="space-y-2">
+                <div className="flex items-center gap-2">
+                  <div className="w-3 h-3 bg-blue-500 rounded-full"></div>
+                  <h3 className="font-semibold text-gray-900">Marker #{idx + 1}</h3>
+                </div>
+                <div className="space-y-1 text-sm">
+                  <div className="flex justify-between">
+                    <span className="text-gray-600">Latitude:</span>
+                    <span className="font-mono text-gray-900">{pos[0].toFixed(6)}°</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-600">Longitude:</span>
+                    <span className="font-mono text-gray-900">{pos[1].toFixed(6)}°</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-600">Precision:</span>
+                    <span className="text-gray-900">~{pos[0].toFixed(6).split('.')[1]?.length || 0} decimal places</span>
+                  </div>
+                </div>
+                <div className="pt-2 border-t border-gray-200">
+                  <p className="text-xs text-gray-500">
+                    Click to view details or edit location
+                  </p>
+                </div>
+              </div>
+            </div>
           </Popup>
         </Marker>
       ))}
       {enableAddClusters && tempClusterMarker && (
         <Marker position={tempClusterMarker} icon={defaultIcon}>
           <Popup>
-            Selected location: {tempClusterMarker[0].toFixed(6)},{" "}
-            {tempClusterMarker[1].toFixed(6)}
+            <div className="p-2 min-w-[200px]">
+              <div className="space-y-2">
+                <div className="flex items-center gap-2">
+                  <div className="w-3 h-3 bg-orange-500 rounded-full animate-pulse"></div>
+                  <h3 className="font-semibold text-gray-900">New Cluster Location</h3>
+                </div>
+                <div className="space-y-1 text-sm">
+                  <div className="flex justify-between">
+                    <span className="text-gray-600">Latitude:</span>
+                    <span className="font-mono text-gray-900">{tempClusterMarker[0].toFixed(6)}°</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-600">Longitude:</span>
+                    <span className="font-mono text-gray-900">{tempClusterMarker[1].toFixed(6)}°</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-600">Status:</span>
+                    <span className="text-orange-600 font-medium">Pending Creation</span>
+                  </div>
+                </div>
+                <div className="pt-2 border-t border-gray-200">
+                  <p className="text-xs text-gray-500">
+                    This location will be used for the new cluster
+                  </p>
+                </div>
+              </div>
+            </div>
           </Popup>
         </Marker>
       )}
@@ -350,13 +401,79 @@ export default function Map({
         <Polyline
           positions={localPolyline}
           pathOptions={{ color: "#10b981", weight: 3 }}
-        />
+        >
+          <Popup>
+            <div className="p-2 min-w-[200px]">
+              <div className="space-y-2">
+                <div className="flex items-center gap-2">
+                  <div className="w-3 h-3 bg-green-500 rounded-full"></div>
+                  <h3 className="font-semibold text-gray-900">Path Route</h3>
+                </div>
+                <div className="space-y-1 text-sm">
+                  <div className="flex justify-between">
+                    <span className="text-gray-600">Points:</span>
+                    <span className="text-gray-900">{localPolyline.length}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-600">Start:</span>
+                    <span className="font-mono text-gray-900 text-xs">
+                      {localPolyline[0]?.[0].toFixed(4)}°, {localPolyline[0]?.[1].toFixed(4)}°
+                    </span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-600">End:</span>
+                    <span className="font-mono text-gray-900 text-xs">
+                      {localPolyline[localPolyline.length - 1]?.[0].toFixed(4)}°, {localPolyline[localPolyline.length - 1]?.[1].toFixed(4)}°
+                    </span>
+                  </div>
+                </div>
+                <div className="pt-2 border-t border-gray-200">
+                  <p className="text-xs text-gray-500">
+                    Interactive path with {localPolyline.length} waypoints
+                  </p>
+                </div>
+              </div>
+            </div>
+          </Popup>
+        </Polyline>
       )}
       {polygon && polygon.length > 2 && (
         <Polygon
           positions={polygon}
           pathOptions={{ color: polygonColor, weight: 2, fillOpacity: 0.2 }}
-        />
+        >
+          <Popup>
+            <div className="p-2 min-w-[200px]">
+              <div className="space-y-2">
+                <div className="flex items-center gap-2">
+                  <div className="w-3 h-3 rounded" style={{ backgroundColor: polygonColor }}></div>
+                  <h3 className="font-semibold text-gray-900">Area Boundary</h3>
+                </div>
+                <div className="space-y-1 text-sm">
+                  <div className="flex justify-between">
+                    <span className="text-gray-600">Vertices:</span>
+                    <span className="text-gray-900">{polygon.length}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-600">Type:</span>
+                    <span className="text-gray-900">Closed Polygon</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-600">Color:</span>
+                    <span className="text-gray-900" style={{ color: polygonColor }}>
+                      {polygonColor}
+                    </span>
+                  </div>
+                </div>
+                <div className="pt-2 border-t border-gray-200">
+                  <p className="text-xs text-gray-500">
+                    Static boundary area with {polygon.length} corner points
+                  </p>
+                </div>
+              </div>
+            </div>
+          </Popup>
+        </Polygon>
       )}
       <UserLocationLayer cemeteryCenter={center} />
       {enableLocateControl && (
@@ -462,10 +579,67 @@ function UserLocationLayer({ cemeteryCenter }: { cemeteryCenter?: [number, numbe
   const position: [number, number] = [userLocation.lat, userLocation.lng];
   const accuracy = userLocation.accuracy ?? 0;
   const heading = userLocation.heading ?? null;
+  const speed = (userLocation as any).speed ?? null;
+  const timestamp = (userLocation as any).timestamp ?? null;
+
   return (
     <>
       {/* Dot for precise position (pixel radius, no icon dependency) */}
-      <CircleMarker center={position} radius={6} pathOptions={{ color: "#2563eb", fillColor: "#3b82f6", fillOpacity: 0.9 }} />
+      <CircleMarker
+        center={position}
+        radius={6}
+        pathOptions={{ color: "#2563eb", fillColor: "#3b82f6", fillOpacity: 0.9 }}
+      >
+        <Popup>
+          <div className="p-2 min-w-[220px]">
+            <div className="space-y-2">
+              <div className="flex items-center gap-2">
+                <div className="w-3 h-3 bg-blue-500 rounded-full animate-pulse"></div>
+                <h3 className="font-semibold text-gray-900">Your Location</h3>
+              </div>
+              <div className="space-y-1 text-sm">
+                <div className="flex justify-between">
+                  <span className="text-gray-600">Latitude:</span>
+                  <span className="font-mono text-gray-900">{position[0].toFixed(6)}°</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-gray-600">Longitude:</span>
+                  <span className="font-mono text-gray-900">{position[1].toFixed(6)}°</span>
+                </div>
+                {accuracy > 0 && (
+                  <div className="flex justify-between">
+                    <span className="text-gray-600">Accuracy:</span>
+                    <span className="text-gray-900">±{Math.round(accuracy)}m</span>
+                  </div>
+                )}
+                {speed !== null && speed > 0 && (
+                  <div className="flex justify-between">
+                    <span className="text-gray-600">Speed:</span>
+                    <span className="text-gray-900">{Math.round(speed * 3.6)} km/h</span>
+                  </div>
+                )}
+                {heading !== null && (
+                  <div className="flex justify-between">
+                    <span className="text-gray-600">Heading:</span>
+                    <span className="text-gray-900">{Math.round(heading)}°</span>
+                  </div>
+                )}
+                {timestamp && (
+                  <div className="flex justify-between">
+                    <span className="text-gray-600">Updated:</span>
+                    <span className="text-gray-900">{new Date(timestamp).toLocaleTimeString()}</span>
+                  </div>
+                )}
+              </div>
+              <div className="pt-2 border-t border-gray-200">
+                <p className="text-xs text-gray-500">
+                  {accuracy > 0 ? `Location accuracy: ±${Math.round(accuracy)} meters` : 'High precision location'}
+                </p>
+              </div>
+            </div>
+          </div>
+        </Popup>
+      </CircleMarker>
       {/* Accuracy circle */}
       {accuracy > 0 && (
         <Circle
