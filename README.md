@@ -10,12 +10,13 @@ Sundin ang mga instruksyon na ito upang mai-set up at mapatakbo ang proyekto sa 
 - [Node.js](https://nodejs.org/) (version 18 o mas mataas)
 - [Docker](https://www.docker.com/) (kailangan para sa lokal na database)
 - [pnpm](https://pnpm.io/) (inirerekomenda) o npm/bun
+- [Git](https://git-scm.com/)
 
 ### Pag-install
 
 1. **I-clone ang repository:**
    ```bash
-   git clone <repository-url>
+   git clone https://github.com/BSIT-Evanism/ligaocemv3.git
    cd ligaocemv3
    ```
 
