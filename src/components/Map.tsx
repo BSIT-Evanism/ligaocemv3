@@ -444,7 +444,7 @@ export default function Map({
           pathOptions={{ color: polygonColor, weight: 2, fillOpacity: 0.2 }}
           interactive={!enableAddClusters}
         >
-          <Popup>
+          {/* <Popup>
             <div className="p-2 min-w-[200px]">
               <div className="space-y-2">
                 <div className="flex items-center gap-2">
@@ -474,7 +474,7 @@ export default function Map({
                 </div>
               </div>
             </div>
-          </Popup>
+          </Popup> */}
         </Polygon>
       )}
       <UserLocationLayer cemeteryCenter={center} />
