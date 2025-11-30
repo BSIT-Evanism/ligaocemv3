@@ -1,29 +1,74 @@
-# Create T3 App
+# Ligao Smart Cemetery Management System
 
-This is a [T3 Stack](https://create.t3.gg/) project bootstrapped with `create-t3-app`.
 
-## What's next? How do I make an app with this?
+## Pagsisimula
 
-We try to keep this project as simple as possible, so you can start with just the scaffolding we set up for you, and add additional things later when they become necessary.
+Sundin ang mga instruksyon na ito upang mai-set up at mapatakbo ang proyekto sa iyong lokal na makina.
 
-If you are not familiar with the different technologies used in this project, please refer to the respective docs. If you still are in the wind, please join our [Discord](https://t3.gg/discord) and ask for help.
+### Mga Kinakailangan
+
+- [Node.js](https://nodejs.org/) (version 18 o mas mataas)
+- [Docker](https://www.docker.com/) (kailangan para sa lokal na database)
+- [pnpm](https://pnpm.io/) (inirerekomenda) o npm/bun
+
+### Pag-install
+
+1. **I-clone ang repository:**
+   ```bash
+   git clone <repository-url>
+   cd ligaocemv3
+   ```
+
+2. **I-install ang mga dependencies:**
+   ```bash
+   pnpm install
+   # o
+   npm install
+   ```
+
+### Konfigurasyon
+
+1. **Mga Environment Variable:**
+   Kopyahin ang halimbawang environment file upang malikha ang iyong lokal na `.env` file:
+   ```bash
+   cp .env.example .env
+   ```
+   
+   Buksan ang `.env` at siguraduhing tama ang `DATABASE_URL`. Ang default na konfigurasyon ay naka-set up upang gumana sa ibinigay na database script.
+
+### Pag-set up ng Database
+
+1. **Simulan ang Database:**
+   Ang proyektong ito ay may kasamang script upang magpatakbo ng PostgreSQL container gamit ang Docker.
+   ```bash
+   ./start-database.sh
+   ```
+   *Paalala: Siguraduhing tumatakbo ang Docker Desktop (o katumbas nito).*
+
+2. **I-push ang Schema:**
+   I-apply ang database schema gamit ang Drizzle Kit:
+   ```bash
+   pnpm db:push
+   # o
+   npm run db:push
+   ```
+
+### Pagpapatakbo ng Aplikasyon
+
+Simulan ang development server:
+```bash
+pnpm dev
+# o
+npm run dev
+```
+
+Buksan ang [http://localhost:3000](http://localhost:3000) gamit ang iyong browser upang makita ang resulta.
+
+### Mga Teknolohiyang Ginamit
 
 - [Next.js](https://nextjs.org)
 - [NextAuth.js](https://next-auth.js.org)
-- [Prisma](https://prisma.io)
-- [Drizzle](https://orm.drizzle.team)
+- [Drizzle ORM](https://orm.drizzle.team)
 - [Tailwind CSS](https://tailwindcss.com)
 - [tRPC](https://trpc.io)
 
-## Learn More
-
-To learn more about the [T3 Stack](https://create.t3.gg/), take a look at the following resources:
-
-- [Documentation](https://create.t3.gg/)
-- [Learn the T3 Stack](https://create.t3.gg/en/faq#what-learning-resources-are-currently-available) — Check out these awesome tutorials
-
-You can check out the [create-t3-app GitHub repository](https://github.com/t3-oss/create-t3-app) — your feedback and contributions are welcome!
-
-## How do I deploy this?
-
-Follow our deployment guides for [Vercel](https://create.t3.gg/en/deployment/vercel), [Netlify](https://create.t3.gg/en/deployment/netlify) and [Docker](https://create.t3.gg/en/deployment/docker) for more information.

@@ -313,7 +313,7 @@ export default function Map({
       />
       <ClickToAddClusters onAdd={handleMapClick} enabled={enableAddClusters} />
       <FitToGeometry enabled={fitToGeometry} />
-      {storeMarkers.map((pos, idx) => (
+      {/* {storeMarkers.map((pos, idx) => (
         <Marker
           key={`${pos[0]}-${pos[1]}-${idx}`}
           position={pos}
@@ -349,7 +349,7 @@ export default function Map({
             </div>
           </Popup>
         </Marker>
-      ))}
+      ))} */}
       {enableAddClusters && tempClusterMarker && (
         <Marker position={tempClusterMarker} icon={defaultIcon}>
           <Popup>
@@ -401,6 +401,7 @@ export default function Map({
         <Polyline
           positions={localPolyline}
           pathOptions={{ color: "#10b981", weight: 3 }}
+          interactive={!enableAddClusters}
         >
           <Popup>
             <div className="p-2 min-w-[200px]">
@@ -441,6 +442,7 @@ export default function Map({
         <Polygon
           positions={polygon}
           pathOptions={{ color: polygonColor, weight: 2, fillOpacity: 0.2 }}
+          interactive={!enableAddClusters}
         >
           <Popup>
             <div className="p-2 min-w-[200px]">
